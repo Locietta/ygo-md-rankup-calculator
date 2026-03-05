@@ -24,7 +24,7 @@
       </p>
     </v-alert>
 
-    <v-row class="ga-4 ga-md-6" align="stretch">
+    <v-row class="panel-row align-stretch">
       <v-col cols="12" lg="5">
         <v-sheet class="panel panel-input" rounded="xl" elevation="3">
           <div class="panel-header">
@@ -125,7 +125,7 @@
           </div>
 
           <template v-if="results">
-            <v-row class="metric-grid" dense>
+            <v-row class="metric-grid" density="compact">
               <v-col cols="12" sm="6">
                 <v-card class="metric metric-a" rounded="lg" variant="tonal">
                   <p class="metric-title">离开当前小段期望局数</p>
@@ -190,7 +190,7 @@
       :color="snackbar.color"
       location="top right"
       rounded="lg"
-      elevation="6"
+      elevation="5"
     >
       <v-icon start class="mr-2">{{ snackbar.icon }}</v-icon>
       {{ snackbar.text }}
@@ -880,11 +880,14 @@ const handleCalculate = async (): Promise<void> => {
 }
 
 .panel {
-  height: 100%;
   padding: 1.2rem;
   background: rgba(255, 255, 255, 0.9);
   border: 1px solid rgba(255, 255, 255, 0.72);
   backdrop-filter: blur(8px);
+}
+
+.panel-input {
+  height: 100%;
 }
 
 .panel-header {
@@ -936,6 +939,10 @@ const handleCalculate = async (): Promise<void> => {
   margin-top: 0.1rem;
 }
 
+.panel-row {
+  row-gap: 1rem;
+}
+
 .metric {
   height: 100%;
   padding: 0.95rem;
@@ -985,7 +992,7 @@ const handleCalculate = async (): Promise<void> => {
   flex-wrap: wrap;
 }
 
-@media (max-width: 960px) {
+@media (max-width: 840px) {
   .panel {
     padding: 1rem;
   }
@@ -998,6 +1005,13 @@ const handleCalculate = async (): Promise<void> => {
     font-size: 1.38rem;
   }
 }
+
+@media (min-width: 840px) {
+  .panel-row {
+    row-gap: 1.5rem;
+  }
+}
+
 </style>
 
 <style>
