@@ -1,0 +1,81 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-main
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: DeployServer
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@main
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 25
+          cache: pnpm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Install wasm-pack
+        run: cargo install wasm-pack --locked
+
+      - name: Install deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: |
+          pnpm build:wasm
+          pnpm build
+
+      - name: Pack dist
+        run: tar -czf dist.tar.gz dist
+
+      - name: Upload artifact to server
+        uses: appleboy/scp-action@v1
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_KEY }}
+          port: ${{ secrets.DEPLOY_PORT }}
+          source: "dist.tar.gz"
+          target: "/tmp"
+
+      - name: Activate release
+        uses: appleboy/ssh-action@v1.2.5
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_KEY }}
+          port: ${{ secrets.DEPLOY_PORT }}
+          script: |
+            set -e
+            APP_DIR="${{ secrets.DEPLOY_PATH }}"
+            TS=$(date +%Y%m%d%H%M%S)
+            RELEASE_DIR="$APP_DIR/releases/$TS"
+
+            mkdir -p "$RELEASE_DIR"
+            tar -xzf /tmp/dist.tar.gz -C "$RELEASE_DIR"
+            ln -sfn "$RELEASE_DIR/dist" "$APP_DIR/current"
+
+            # 保留最近 5 个版本
+            ls -1dt "$APP_DIR"/releases/* | tail -n +6 | xargs -r rm -rf
+
+            rm -f /tmp/dist.tar.gz
