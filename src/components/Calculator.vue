@@ -59,7 +59,7 @@
               density="comfortable"
               class="mb-3"
               prepend-inner-icon="mdi-chart-line-variant"
-              hint="范围为 -2 到 K-1，K 由大段类型决定"
+              :hint="currentNetWinsHint"
               persistent-hint
             />
 
@@ -135,7 +135,13 @@
               <v-col cols="12" sm="6">
                 <v-card class="metric metric-d" rounded="lg" variant="tonal">
                   <p class="metric-title">到下一个大段 V 的期望局数</p>
-                  <p class="metric-value">{{ formatMatches(results.expectedToNextBigTierV) }}</p>
+                  <p class="metric-value">
+                    {{
+                      isHighestBigTier
+                        ? "已是最高段位"
+                        : formatMatches(results.expectedToNextBigTierV)
+                    }}
+                  </p>
                 </v-card>
               </v-col>
             </v-row>
@@ -221,10 +227,16 @@ interface FormValidator {
   validate: () => Promise<{ valid: boolean }>;
 }
 
-const rankTypeOptions: Array<{ label: string; value: RankK }> = [
-  { label: "白金/钻石段（净胜 4 场升段）", value: 4 },
-  { label: "大师段（净胜 5 场升段）", value: 5 },
+const rankTypeOptions: Array<{ label: string; value: RankK; isHighestBigTier: boolean }> = [
+  { label: "白金/钻石段（净胜 4 场升段）", value: 4, isHighestBigTier: false },
+  { label: "大师段（净胜 5 场升段）", value: 5, isHighestBigTier: true },
 ];
+
+const defaultRankTypeConfig = rankTypeOptions[0] ?? {
+  label: "白金/钻石段（净胜 4 场升段）",
+  value: 4 as RankK,
+  isHighestBigTier: false,
+};
 
 const selectMenuProps = {
   contentClass: "rank-select-menu",
@@ -288,6 +300,18 @@ onMounted(async () => {
 });
 
 const maxNetWins = computed(() => rankType.value - 1);
+const minNetWins = computed(() => (currentSubtier.value === 0 ? 0 : -2));
+const currentRankTypeConfig = computed(
+  () => rankTypeOptions.find((option) => option.value === rankType.value) ?? defaultRankTypeConfig
+);
+const isHighestBigTier = computed(() => currentRankTypeConfig.value.isHighestBigTier);
+const currentNetWinsHint = computed(() => {
+  if (currentSubtier.value === 0) {
+    return "V 是当前大段最低段位，范围为 0 到 K-1";
+  }
+
+  return "范围为 -2 到 K-1，K 由大段类型决定";
+});
 
 const currentSubtierLabel = computed(
   () => subtierOptions.find((option) => option.value === currentSubtier.value)?.label ?? "-"
@@ -302,7 +326,9 @@ const winRateRules = [
 const currentNetWinsRules = computed(() => [
   (value: unknown) => value !== null || "净胜局不能为空",
   (value: unknown) => Number.isInteger(Number(value)) || "净胜局必须是整数",
-  (value: unknown) => Number(value) >= -2 || "净胜局不能小于 -2",
+  (value: unknown) =>
+    Number(value) >= minNetWins.value ||
+    (currentSubtier.value === 0 ? "V 段位净胜局不能小于 0" : "净胜局不能小于 -2"),
   (value: unknown) => Number(value) <= maxNetWins.value || `净胜局不能大于 ${maxNetWins.value}`,
 ]);
 
@@ -434,6 +460,67 @@ const calculateSegmentStatsJs = (pRaw: number, kValue: RankK, netWinsValue: numb
   };
 };
 
+const calculateVFloorSegmentStatsJs = (
+  pRaw: number,
+  kValue: RankK,
+  netWinsValue: number
+): SegmentStats => {
+  const pValue = clamp(pRaw, 0, 1);
+  const qValue = 1 - pValue;
+  const target = Number(kValue);
+  const start = Math.floor(clamp(netWinsValue, 0, target - 1));
+
+  if (pValue <= 0) {
+    return {
+      expectedMatches: Number.POSITIVE_INFINITY,
+      promotionProbability: 0,
+    };
+  }
+
+  if (pValue >= 1) {
+    return {
+      expectedMatches: target - start,
+      promotionProbability: 1,
+    };
+  }
+
+  const size = target; // unknowns E0..E(k-1), Ek=0
+  const matrix: number[][] = Array.from({ length: size }, () => Array(size).fill(0));
+  const vector: number[] = Array(size).fill(1);
+
+  for (let i = 0; i < size; i += 1) {
+    const row = matrix[i];
+    if (!row) {
+      return {
+        expectedMatches: Number.POSITIVE_INFINITY,
+        promotionProbability: 1,
+      };
+    }
+
+    if (i === 0) {
+      row[0] = pValue;
+      if (size > 1) {
+        row[1] = -pValue;
+      }
+      continue;
+    }
+
+    row[i] = 1;
+    row[i - 1] = -qValue;
+    if (i + 1 < size) {
+      row[i + 1] = -pValue;
+    }
+  }
+
+  const solved = solveLinearSystem(matrix, vector);
+  const expectedMatches = solved?.[start] ?? Number.POSITIVE_INFINITY;
+
+  return {
+    expectedMatches,
+    promotionProbability: 1,
+  };
+};
+
 const solveLinearSystem = (matrix: number[][], vector: number[]): number[] | null => {
   const n = matrix.length;
   const a = matrix.map((row) => [...row]);
@@ -525,7 +612,8 @@ const solveLinearSystem = (matrix: number[][], vector: number[]): number[] | nul
 const computeExpectedToCurrentTierI = (
   currentTier: SubtierValue,
   currentStats: SegmentStats,
-  baseStats: SegmentStats
+  baseStats: SegmentStats,
+  vFloorBaseStats: SegmentStats
 ): number => {
   if (currentTier === 4) {
     return 0;
@@ -545,7 +633,7 @@ const computeExpectedToCurrentTierI = (
       return Number.POSITIVE_INFINITY;
     }
 
-    const stats = tier === currentTier ? currentStats : baseStats;
+    const stats = tier === currentTier ? currentStats : tier === 0 ? vFloorBaseStats : baseStats;
     const up = stats.promotionProbability;
     const down = 1 - up;
 
@@ -575,7 +663,8 @@ const computeExpectedToCurrentTierI = (
 const computeExpectedToNextBigTierV = (
   currentTier: SubtierValue,
   currentStats: SegmentStats,
-  baseStats: SegmentStats
+  baseStats: SegmentStats,
+  vFloorBaseStats: SegmentStats
 ): number => {
   if (baseStats.promotionProbability <= EPS) {
     return Number.POSITIVE_INFINITY;
@@ -591,7 +680,7 @@ const computeExpectedToNextBigTierV = (
       return Number.POSITIVE_INFINITY;
     }
 
-    const stats = tier === currentTier ? currentStats : baseStats;
+    const stats = tier === currentTier ? currentStats : tier === 0 ? vFloorBaseStats : baseStats;
     const up = stats.promotionProbability;
     const down = 1 - up;
 
@@ -624,14 +713,28 @@ const calculateRankProgressStatsJs = (
   currentNetWinsValue: number,
   currentTier: SubtierValue
 ): CalculationResult => {
-  const currentStats = calculateSegmentStatsJs(pValue, kValue, currentNetWinsValue);
+  const currentStats =
+    currentTier === 0
+      ? calculateVFloorSegmentStatsJs(pValue, kValue, currentNetWinsValue)
+      : calculateSegmentStatsJs(pValue, kValue, currentNetWinsValue);
   const baseStats = calculateSegmentStatsJs(pValue, kValue, 0);
+  const vFloorBaseStats = calculateVFloorSegmentStatsJs(pValue, kValue, 0);
 
   return {
     leaveCurrentSegmentExpected: currentStats.expectedMatches,
     currentSegmentPromotionProbability: currentStats.promotionProbability,
-    expectedToCurrentTierI: computeExpectedToCurrentTierI(currentTier, currentStats, baseStats),
-    expectedToNextBigTierV: computeExpectedToNextBigTierV(currentTier, currentStats, baseStats),
+    expectedToCurrentTierI: computeExpectedToCurrentTierI(
+      currentTier,
+      currentStats,
+      baseStats,
+      vFloorBaseStats
+    ),
+    expectedToNextBigTierV: computeExpectedToNextBigTierV(
+      currentTier,
+      currentStats,
+      baseStats,
+      vFloorBaseStats
+    ),
   };
 };
 

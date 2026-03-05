@@ -46,14 +46,29 @@ pub fn calculate_rank_progress_stats(
         };
     }
 
-    let current_stats = calculate_rank_stats_formulas_internal(p, k_val, current_net_wins_val);
+    let current_stats = if current_subtier_val == 0 {
+        calculate_v_floor_segment_stats_internal(p, k_val, current_net_wins_val)
+    } else {
+        calculate_rank_stats_formulas_internal(p, k_val, current_net_wins_val)
+    };
     let base_stats = calculate_rank_stats_formulas_internal(p, k_val, 0);
+    let v_floor_base_stats = calculate_v_floor_segment_stats_internal(p, k_val, 0);
     let current_tier = current_subtier_val as usize;
 
     let expected_to_current_tier_i =
-        compute_expected_to_current_tier_i(current_tier, &current_stats, &base_stats);
+        compute_expected_to_current_tier_i(
+            current_tier,
+            &current_stats,
+            &base_stats,
+            &v_floor_base_stats,
+        );
     let expected_to_next_big_tier_v =
-        compute_expected_to_next_big_tier_v(current_tier, &current_stats, &base_stats);
+        compute_expected_to_next_big_tier_v(
+            current_tier,
+            &current_stats,
+            &base_stats,
+            &v_floor_base_stats,
+        );
 
     RankProgressStats {
         leave_current_segment_expected: current_stats.expected_matches,
@@ -126,6 +141,61 @@ fn calculate_rank_stats_formulas_internal(p: f64, k_val: i32, current_net_wins_v
     }
 }
 
+fn calculate_v_floor_segment_stats_internal(p: f64, k_val: i32, current_net_wins_val: i32) -> RankStats {
+    if !(k_val == 4 || k_val == 5) {
+        return RankStats {
+            expected_matches: f64::INFINITY,
+            promotion_probability: f64::NAN,
+        };
+    }
+
+    let start = current_net_wins_val.clamp(0, k_val - 1) as usize;
+
+    if p <= 0.0 {
+        return RankStats {
+            expected_matches: f64::INFINITY,
+            promotion_probability: 0.0,
+        };
+    }
+
+    if p >= 1.0 {
+        return RankStats {
+            expected_matches: (k_val - start as i32) as f64,
+            promotion_probability: 1.0,
+        };
+    }
+
+    let q = 1.0 - p;
+    let size = k_val as usize;
+    let mut matrix = vec![vec![0.0; size]; size];
+    let vector = vec![1.0; size];
+
+    for i in 0..size {
+        if i == 0 {
+            matrix[i][0] = p;
+            if size > 1 {
+                matrix[i][1] = -p;
+            }
+            continue;
+        }
+
+        matrix[i][i] = 1.0;
+        matrix[i][i - 1] = -q;
+        if i + 1 < size {
+            matrix[i][i + 1] = -p;
+        }
+    }
+
+    let expected_matches = solve_linear_system(&matrix, &vector)
+        .and_then(|solved| solved.get(start).copied())
+        .unwrap_or(f64::INFINITY);
+
+    RankStats {
+        expected_matches,
+        promotion_probability: 1.0,
+    }
+}
+
 fn solve_linear_system(matrix: &[Vec<f64>], vector: &[f64]) -> Option<Vec<f64>> {
     let n = matrix.len();
     if n == 0 || vector.len() != n {
@@ -180,6 +250,7 @@ fn compute_expected_to_current_tier_i(
     current_tier: usize,
     current_stats: &RankStats,
     base_stats: &RankStats,
+    v_floor_base_stats: &RankStats,
 ) -> f64 {
     if current_tier >= 4 {
         return 0.0;
@@ -197,6 +268,8 @@ fn compute_expected_to_current_tier_i(
     for tier in 0..size {
         let stats = if tier == current_tier {
             current_stats
+        } else if tier == 0 {
+            v_floor_base_stats
         } else {
             base_stats
         };
@@ -227,6 +300,7 @@ fn compute_expected_to_next_big_tier_v(
     current_tier: usize,
     current_stats: &RankStats,
     base_stats: &RankStats,
+    v_floor_base_stats: &RankStats,
 ) -> f64 {
     if base_stats.promotion_probability <= EPS {
         return f64::INFINITY;
@@ -240,6 +314,8 @@ fn compute_expected_to_next_big_tier_v(
     for tier in 0..size {
         let stats = if tier == current_tier {
             current_stats
+        } else if tier == 0 {
+            v_floor_base_stats
         } else {
             base_stats
         };
