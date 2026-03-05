@@ -153,7 +153,7 @@
                   <p class="metric-title">到下一个大段 V 的期望局数</p>
                   <p class="metric-value">
                     {{
-                      isHighestBigTier
+                      displayIsHighestBigTier
                         ? "已是最高段位"
                         : formatMatches(results.expectedToNextBigTierV)
                     }}
@@ -164,13 +164,13 @@
 
             <div class="meta mt-4">
               <v-chip size="small" color="primary" variant="outlined" class="mr-2 mb-2">
-                当前小段：{{ currentSubtierLabel }}
+                当前小段：{{ displaySubtierLabel }}
               </v-chip>
               <v-chip size="small" color="primary" variant="outlined" class="mr-2 mb-2">
-                K = {{ rankType }}
+                K = {{ displayRankType }}
               </v-chip>
               <v-chip size="small" color="primary" variant="outlined" class="mr-2 mb-2">
-                胜率 = {{ winRate.toFixed(1) }}%
+                胜率 = {{ displayWinRate === null ? "-" : displayWinRate.toFixed(1) }}%
               </v-chip>
               <v-chip size="small" color="secondary" variant="tonal" class="mb-2">
                 求解后端：{{ solverMode }}
@@ -232,6 +232,13 @@ interface CalculationResult {
   expectedToNextBigTierV: number;
 }
 
+interface CalculationSnapshot {
+  rankType: RankK;
+  currentSubtierLabel: string;
+  winRate: number;
+  isHighestBigTier: boolean;
+}
+
 interface WasmRankProgressStats {
   leave_current_segment_expected: number;
   current_segment_promotion_probability: number;
@@ -278,6 +285,7 @@ const isLoading = ref(false);
 const solverMode = ref<"WASM" | "JS">("WASM");
 const wasmReady = ref(false);
 const results = ref<CalculationResult | null>(null);
+const lastCalculation = ref<CalculationSnapshot | null>(null);
 
 const snackbar = ref<SnackbarState>({
   visible: false,
@@ -317,10 +325,6 @@ onMounted(async () => {
 
 const maxNetWins = computed(() => rankType.value - 1);
 const minNetWins = computed(() => (currentSubtier.value === 0 ? 0 : -2));
-const currentRankTypeConfig = computed(
-  () => rankTypeOptions.find((option) => option.value === rankType.value) ?? defaultRankTypeConfig,
-);
-const isHighestBigTier = computed(() => currentRankTypeConfig.value.isHighestBigTier);
 const currentNetWinsHint = computed(() => {
   const upperBound = maxNetWins.value;
 
@@ -334,6 +338,10 @@ const currentNetWinsHint = computed(() => {
 const currentSubtierLabel = computed(
   () => subtierOptions.find((option) => option.value === currentSubtier.value)?.label ?? "-",
 );
+const displaySubtierLabel = computed(() => lastCalculation.value?.currentSubtierLabel ?? "-");
+const displayRankType = computed(() => lastCalculation.value?.rankType ?? "-");
+const displayWinRate = computed(() => lastCalculation.value?.winRate ?? null);
+const displayIsHighestBigTier = computed(() => lastCalculation.value?.isHighestBigTier ?? false);
 
 const winRateRules = [
   (value: unknown) => value !== null || "胜率不能为空",
@@ -783,10 +791,19 @@ const handleCalculate = async (): Promise<void> => {
 
   isLoading.value = true;
   try {
-    const p = clamp(winRate.value / 100, 0, 1);
+    const winRateValue = winRate.value;
+    const p = clamp(winRateValue / 100, 0, 1);
     const k = rankType.value;
     const currentNet = currentNetWins.value;
     const currentTier = currentSubtier.value;
+    const rankTypeConfig =
+      rankTypeOptions.find((option) => option.value === k) ?? defaultRankTypeConfig;
+    const snapshot: CalculationSnapshot = {
+      rankType: k,
+      currentSubtierLabel: currentSubtierLabel.value,
+      winRate: winRateValue,
+      isHighestBigTier: rankTypeConfig.isHighestBigTier,
+    };
 
     if (wasmReady.value) {
       try {
@@ -817,6 +834,8 @@ const handleCalculate = async (): Promise<void> => {
       solverMode.value = "JS";
       results.value = calculateRankProgressStatsJs(p, k, currentNet, currentTier);
     }
+
+    lastCalculation.value = snapshot;
 
     showSnackbar("计算完成", "success", "mdi-check-circle-outline", 2200);
   } catch (error) {
