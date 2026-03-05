@@ -4,7 +4,14 @@
       <p class="hero-kicker">Yu-Gi-Oh! Master Duel</p>
       <h1 class="hero-title">段位升降与大段期望计算器</h1>
       <p class="hero-subtitle">
-        单小段结果采用闭式公式，大段结果基于递推/DP。输入当前小段、位置和胜率后，一次给出四项指标。
+        原理可以参看我的博客文章：
+        <a
+          href="https://blog.locietta.xyz/posts/possibility-calculation-2"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          游戏王MD中的概率问题（二）：Bo2与升降段
+        </a>
       </p>
     </section>
 
@@ -78,17 +85,6 @@
                 class="mt-3"
               />
             </v-card>
-
-            <v-alert
-              type="info"
-              variant="tonal"
-              density="comfortable"
-              rounded="lg"
-              icon="mdi-information-outline"
-              class="my-5"
-            >
-              DP 模型将每个小段视为一个递推状态：升段进入下一小段，降段回到上一小段（V 视作地板）。
-            </v-alert>
 
             <v-btn
               type="submit"
@@ -223,8 +219,8 @@ interface FormValidator {
 }
 
 const rankTypeOptions: Array<{ label: string; value: RankK }> = [
-  { label: "白金/钻石系（单小段净胜 4 场升段）", value: 4 },
-  { label: "大师系（单小段净胜 5 场升段）", value: 5 },
+  { label: "白金/钻石段（净胜 4 场升段）", value: 4 },
+  { label: "大师段（净胜 5 场升段）", value: 5 },
 ];
 
 const subtierOptions: Array<{ label: string; value: SubtierValue }> = [
@@ -244,7 +240,7 @@ const currentNetWins = ref<number>(0);
 const winRate = ref<number>(55);
 
 const isLoading = ref(false);
-const solverMode = ref<"WASM整链路" | "JS整链路">("WASM整链路");
+const solverMode = ref<"WASM" | "JS">("WASM");
 const wasmReady = ref(false);
 const results = ref<CalculationResult | null>(null);
 
@@ -275,12 +271,12 @@ onMounted(async () => {
   try {
     await init();
     wasmReady.value = true;
-    solverMode.value = "WASM整链路";
+    solverMode.value = "WASM";
   } catch (error) {
     console.error("WASM init failed, fallback to JS formulas", error);
     wasmReady.value = false;
-    solverMode.value = "JS整链路";
-    showSnackbar("WASM 加载失败，已自动切换 JS 整链路", "warning", "mdi-alert");
+    solverMode.value = "JS";
+    showSnackbar("WASM 加载失败，已自动切换 JS ", "warning", "mdi-alert");
   }
 });
 
@@ -671,7 +667,7 @@ const handleCalculate = async (): Promise<void> => {
           currentTier
         ) as WasmRankProgressStats;
 
-        solverMode.value = "WASM整链路";
+        solverMode.value = "WASM";
         results.value = {
           leaveCurrentSegmentExpected: Math.max(wasmResult.leave_current_segment_expected, 0),
           currentSegmentPromotionProbability: clamp(
@@ -684,11 +680,11 @@ const handleCalculate = async (): Promise<void> => {
         };
       } catch (error) {
         console.warn("WASM full pipeline failed, fallback to JS full pipeline", error);
-        solverMode.value = "JS整链路";
+        solverMode.value = "JS";
         results.value = calculateRankProgressStatsJs(p, k, currentNet, currentTier);
       }
     } else {
-      solverMode.value = "JS整链路";
+      solverMode.value = "JS";
       results.value = calculateRankProgressStatsJs(p, k, currentNet, currentTier);
     }
 
@@ -748,6 +744,18 @@ const handleCalculate = async (): Promise<void> => {
   font-size: 0.98rem;
   line-height: 1.6;
   opacity: 0.95;
+}
+
+.hero-subtitle a {
+  color: #8fe8ff;
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+  transition: color 0.2s ease;
+}
+
+.hero-subtitle a:hover {
+  color: #ffd08f;
 }
 
 .panel {
