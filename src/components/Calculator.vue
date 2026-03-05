@@ -29,6 +29,7 @@
               :items="rankTypeOptions"
               item-title="label"
               item-value="value"
+              :menu-props="selectMenuProps"
               label="当前大段类型"
               variant="outlined"
               density="comfortable"
@@ -41,6 +42,7 @@
               :items="subtierOptions"
               item-title="label"
               item-value="value"
+              :menu-props="selectMenuProps"
               label="当前小段"
               variant="outlined"
               density="comfortable"
@@ -61,8 +63,8 @@
               persistent-hint
             />
 
-            <v-card variant="tonal" class="pa-4 mb-2 winrate-box" rounded="lg">
-              <div class="d-flex justify-space-between align-center mb-2">
+            <v-card variant="flat" class="mb-2 winrate-box" rounded="lg">
+              <div class="d-flex justify-space-between align-center mb-2 winrate-head">
                 <label class="winrate-label">平均胜率</label>
                 <strong class="winrate-value">{{ winRate.toFixed(1) }}%</strong>
               </div>
@@ -73,6 +75,7 @@
                 :step="0.1"
                 color="primary"
                 hide-details
+                class="winrate-slider"
               />
               <v-text-field
                 v-model.number="winRate"
@@ -82,7 +85,7 @@
                 variant="outlined"
                 density="compact"
                 hide-details="auto"
-                class="mt-3"
+                class="mt-3 winrate-input"
               />
             </v-card>
 
@@ -222,6 +225,10 @@ const rankTypeOptions: Array<{ label: string; value: RankK }> = [
   { label: "白金/钻石段（净胜 4 场升段）", value: 4 },
   { label: "大师段（净胜 5 场升段）", value: 5 },
 ];
+
+const selectMenuProps = {
+  contentClass: "rank-select-menu",
+};
 
 const subtierOptions: Array<{ label: string; value: SubtierValue }> = [
   { label: "V", value: 0 },
@@ -780,17 +787,35 @@ const handleCalculate = async (): Promise<void> => {
 }
 
 .winrate-box {
-  background: linear-gradient(150deg, rgba(38, 114, 231, 0.11), rgba(46, 181, 139, 0.13));
+  padding: 1rem 1rem 0.95rem;
+  background: linear-gradient(148deg, rgba(255, 255, 255, 0.92), rgba(236, 251, 247, 0.96));
+  border: 1px solid rgba(106, 181, 209, 0.3);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+}
+
+.winrate-head {
+  padding: 0.1rem 0.2rem 0.35rem;
 }
 
 .winrate-label {
-  font-size: 0.93rem;
-  color: #17324a;
+  font-size: 0.96rem;
+  font-weight: 600;
+  color: #24566f;
+  letter-spacing: 0.01em;
 }
 
 .winrate-value {
-  font-size: 1.08rem;
-  color: #0d5b73;
+  font-size: 1.02rem;
+  font-weight: 700;
+  color: #1f5f80;
+}
+
+.winrate-slider {
+  padding-inline: 0.28rem;
+}
+
+.winrate-input {
+  padding-inline: 0.2rem;
 }
 
 .metric-grid {
@@ -858,5 +883,33 @@ const handleCalculate = async (): Promise<void> => {
   .metric-value {
     font-size: 1.38rem;
   }
+}
+</style>
+
+<style>
+.rank-select-menu .v-list-item--active {
+  background: rgba(66, 165, 245, 0.22) !important;
+}
+
+.rank-select-menu .v-list-item {
+  color: #0d3550 !important;
+}
+
+.rank-select-menu .v-list-item--active .v-list-item-title {
+  color: #0d3550 !important;
+  font-weight: 700;
+}
+
+.rank-select-menu .v-list-item:hover .v-list-item__overlay,
+.rank-select-menu .v-list-item:focus-visible .v-list-item__overlay,
+.rank-select-menu .v-list-item--active .v-list-item__overlay,
+.rank-select-menu .v-list-item--active:hover .v-list-item__overlay {
+  background: #42a5f5 !important;
+  opacity: 0.14 !important;
+}
+
+.rank-select-menu .v-ripple__animation {
+  color: #42a5f5 !important;
+  opacity: 0.22 !important;
 }
 </style>
