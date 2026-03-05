@@ -52,8 +52,11 @@
 
             <v-text-field
               v-model.number="currentNetWins"
-              label="当前小段位置（净胜局）"
+              label="当前小段位置（胜场数）"
               type="number"
+              :min="minNetWins"
+              :max="maxNetWins"
+              :step="1"
               :rules="currentNetWinsRules"
               variant="outlined"
               density="comfortable"
@@ -190,7 +193,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import init, { calculate_rank_progress_stats } from "wasm";
 
 type RankK = 4 | 5;
@@ -228,12 +231,12 @@ interface FormValidator {
 }
 
 const rankTypeOptions: Array<{ label: string; value: RankK; isHighestBigTier: boolean }> = [
-  { label: "白金/钻石段（净胜 4 场升段）", value: 4, isHighestBigTier: false },
-  { label: "大师段（净胜 5 场升段）", value: 5, isHighestBigTier: true },
+  { label: "白金/钻石段（ 4 胜场升段）", value: 4, isHighestBigTier: false },
+  { label: "大师段（ 5 胜场升段）", value: 5, isHighestBigTier: true },
 ];
 
 const defaultRankTypeConfig = rankTypeOptions[0] ?? {
-  label: "白金/钻石段（净胜 4 场升段）",
+  label: "白金/钻石段（ 4 胜场升段）",
   value: 4 as RankK,
   isHighestBigTier: false,
 };
@@ -306,11 +309,13 @@ const currentRankTypeConfig = computed(
 );
 const isHighestBigTier = computed(() => currentRankTypeConfig.value.isHighestBigTier);
 const currentNetWinsHint = computed(() => {
+  const upperBound = maxNetWins.value;
+
   if (currentSubtier.value === 0) {
-    return "V 是当前大段最低段位，范围为 0 到 K-1";
+    return `范围为 0 到 ${upperBound}`; // V 是当前大段最低段位，失败不会有惩罚
   }
 
-  return "范围为 -2 到 K-1，K 由大段类型决定";
+  return `范围为 -2 到 ${upperBound}`; // IV、III、II、I 失败会掉段，最差会掉到 V 段的 0 胜
 });
 
 const currentSubtierLabel = computed(
@@ -324,12 +329,12 @@ const winRateRules = [
 ];
 
 const currentNetWinsRules = computed(() => [
-  (value: unknown) => value !== null || "净胜局不能为空",
-  (value: unknown) => Number.isInteger(Number(value)) || "净胜局必须是整数",
+  (value: unknown) => value !== null || "胜场数不能为空",
+  (value: unknown) => Number.isInteger(Number(value)) || "胜场数必须是整数",
   (value: unknown) =>
     Number(value) >= minNetWins.value ||
-    (currentSubtier.value === 0 ? "V 段位净胜局不能小于 0" : "净胜局不能小于 -2"),
-  (value: unknown) => Number(value) <= maxNetWins.value || `净胜局不能大于 ${maxNetWins.value}`,
+    (currentSubtier.value === 0 ? "V 段位胜场数不能小于 0" : "胜场数不能小于 -2"),
+  (value: unknown) => Number(value) <= maxNetWins.value || `胜场数不能大于 ${maxNetWins.value}`,
 ]);
 
 const clamp = (value: number, min: number, max: number): number => {
@@ -337,6 +342,28 @@ const clamp = (value: number, min: number, max: number): number => {
   if (value > max) return max;
   return value;
 };
+
+watch([currentSubtier, rankType], () => {
+  const numeric = Math.trunc(Number(currentNetWins.value));
+  if (!Number.isFinite(numeric)) {
+    currentNetWins.value = minNetWins.value;
+    return;
+  }
+
+  currentNetWins.value = clamp(numeric, minNetWins.value, maxNetWins.value);
+});
+
+watch(currentNetWins, (value) => {
+  const numeric = Math.trunc(Number(value));
+  if (!Number.isFinite(numeric)) {
+    return;
+  }
+
+  const bounded = clamp(numeric, minNetWins.value, maxNetWins.value);
+  if (bounded !== value) {
+    currentNetWins.value = bounded;
+  }
+});
 
 const createMartingaleFn = (p: number) => {
   return (n: number): number => {
