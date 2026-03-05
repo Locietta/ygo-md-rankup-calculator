@@ -79,14 +79,6 @@ pub fn calculate_rank_progress_stats(
 }
 
 fn calculate_rank_stats_formulas_internal(p: f64, k_val: i32, current_net_wins_val: i32) -> RankStats {
-    // Early validation and edge cases first
-    if k_val != 4 && k_val != 5 {
-        return RankStats {
-            expected_matches: f64::INFINITY,
-            promotion_probability: f64::NAN,
-        };
-    }
-
     // Handle edge cases for p=0 and p=1 first (most intuitive and avoids polynomial calculations)
     // also treat any negative p as 0, and any p > 1 as 1
     if p <= 0.0 {
@@ -122,18 +114,7 @@ fn calculate_rank_stats_formulas_internal(p: f64, k_val: i32, current_net_wins_v
     let promotion_probability =
         (martingale(current_net_wins_val) - martingale(-3)) / (martingale(k_val) - martingale(-3));
 
-    // Pre-calculate powers of p only once
-    let p2 = p * p;
-    let p3 = p2 * p;
-    let p4 = p3 * p;
-    let p5 = p4 * p;
-    let p6 = p5 * p;
-
-    let expected_matches = if k_val == 4 {
-        calculate_k4_stats(p, p2, p3, p4, p5, p6, current_net_wins_val)
-    } else {
-        calculate_k5_stats(p, p2, p3, p4, p5, p6, current_net_wins_val)
-    };
+    let expected_matches = calculate_non_floor_segment_expected_internal(p, k_val, current_net_wins_val);
 
     RankStats {
         expected_matches: expected_matches.max(0.0),
@@ -141,14 +122,42 @@ fn calculate_rank_stats_formulas_internal(p: f64, k_val: i32, current_net_wins_v
     }
 }
 
-fn calculate_v_floor_segment_stats_internal(p: f64, k_val: i32, current_net_wins_val: i32) -> RankStats {
-    if !(k_val == 4 || k_val == 5) {
-        return RankStats {
-            expected_matches: f64::INFINITY,
-            promotion_probability: f64::NAN,
-        };
+fn calculate_non_floor_segment_expected_internal(p: f64, k_val: i32, current_net_wins_val: i32) -> f64 {
+    let start = current_net_wins_val.clamp(-2, k_val - 1);
+    let q = 1.0 - p;
+
+    // Transient states are -2, -1, 0, ..., k-1.
+    let mut states = Vec::with_capacity((k_val + 2) as usize);
+    for s in -2..=k_val - 1 {
+        states.push(s);
     }
 
+    let size = states.len();
+    let mut matrix = vec![vec![0.0; size]; size];
+    let vector = vec![1.0; size];
+
+    for (row, &state) in states.iter().enumerate() {
+        matrix[row][row] = 1.0;
+
+        let next_win = if state < 0 { 1 } else { state + 1 };
+        if (-2..=k_val - 1).contains(&next_win) {
+            let col = (next_win + 2) as usize;
+            matrix[row][col] -= p;
+        }
+
+        let next_lose = state - 1;
+        if (-2..=k_val - 1).contains(&next_lose) {
+            let col = (next_lose + 2) as usize;
+            matrix[row][col] -= q;
+        }
+    }
+
+    solve_linear_system(&matrix, &vector)
+        .and_then(|solved| solved.get((start + 2) as usize).copied())
+        .unwrap_or(f64::INFINITY)
+}
+
+fn calculate_v_floor_segment_stats_internal(p: f64, k_val: i32, current_net_wins_val: i32) -> RankStats {
     let start = current_net_wins_val.clamp(0, k_val - 1) as usize;
 
     if p <= 0.0 {
@@ -343,56 +352,6 @@ fn compute_expected_to_next_big_tier_v(
 }
 
 #[inline]
-fn calculate_k4_stats(
-    p: f64,
-    p2: f64,
-    p3: f64,
-    p4: f64,
-    p5: f64,
-    p6: f64,
-    current_net_wins_val: i32,
-) -> f64 {
-    let denom = p6 - 5.0 * p5 + 11.0 * p4 - 13.0 * p3 + 11.0 * p2 - 5.0 * p + 1.0;
-
-    let expected = match current_net_wins_val {
-        -2 => (2.0 * p5 - 4.0 * p4 - p3 + 10.0 * p2 - 6.0 * p + 3.0) / denom,
-        -1 => (-p5 + 5.0 * p4 - 11.0 * p3 + 15.0 * p2 - 9.0 * p + 4.0) / denom,
-        0 => (p5 - 2.0 * p4 - 3.0 * p3 + 13.0 * p2 - 12.0 * p + 5.0) / denom,
-        1 => (-2.0 * p4 + 2.0 * p3 + 5.0 * p2 - 3.0 * p + 2.0) / denom,
-        2 => (2.0 * p4 + 2.0 * p3 + p2 - p + 1.0) / denom,
-        3 => (-2.0 * p5 + 12.0 * p4 - 29.0 * p3 + 36.0 * p2 - 22.0 * p + 6.0) / denom,
-        _ => f64::INFINITY,
-    };
-
-    expected
-}
-
-#[inline]
-fn calculate_k5_stats(
-    p: f64,
-    p2: f64,
-    p3: f64,
-    p4: f64,
-    p5: f64,
-    p6: f64,
-    current_net_wins_val: i32,
-) -> f64 {
-    let denom = 2.0 * p6 - 10.0 * p5 + 22.0 * p4 - 24.0 * p3 + 16.0 * p2 - 6.0 * p + 1.0;
-    let expected = match current_net_wins_val {
-        -2 => (3.0 * p4 + 3.0 * p3 - 2.0 * p + 1.0) / denom,
-        -1 => (3.0 * p6 - 6.0 * p4 + 3.0 * p3 - 8.0 * p2 + 5.0 * p - 2.0) / denom,
-        0 => (3.0 * p6 - 9.0 * p5 + 12.0 * p4 - 11.0 * p3 + 16.0 * p2 - 9.0 * p + 3.0) / denom,
-        1 => (-2.0 * p5 + 10.0 * p4 - 19.0 * p3 + 24.0 * p2 - 13.0 * p + 4.0) / denom,
-        2 => (3.0 * p6 - 14.0 * p5 + 29.0 * p4 - 35.0 * p3 + 32.0 * p2 - 17.0 * p + 5.0) / denom,
-        3 => (-p5 + 8.0 * p4 - 22.0 * p3 + 32.0 * p2 - 21.0 * p + 6.0) / denom,
-        4 => (3.0 * p6 - 19.0 * p5 + 52.0 * p4 - 78.0 * p3 + 69.0 * p2 - 33.0 * p + 7.0) / denom,
-        _ => f64::INFINITY,
-    };
-
-    expected
-}
-
-#[inline]
 fn create_martingale_fn(p: f64) -> impl Fn(i32) -> f64 {
     move |n: i32| -> f64 {
         if n >= 0 {
@@ -406,5 +365,240 @@ fn create_martingale_fn(p: f64) -> impl Fn(i32) -> f64 {
         } else {
             1.0 - (1.0 - p).powi(n)
         }
+    }
+}
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod tests {
+    use super::*;
+    use rand::{Rng, SeedableRng};
+    use rand_chacha::ChaCha8Rng;
+
+    const TRIALS: usize = 1_000_000;
+    const EXPECTED_REL_TOLERANCE: f64 = 0.02;
+    const PROBABILITY_REL_TOLERANCE: f64 = 0.01;
+    const EXPECTED_ABS_FLOOR: f64 = 1e-6;
+    const PROBABILITY_ABS_FLOOR: f64 = 1e-6;
+    const MAX_STEPS: usize = 1_000_000;
+
+    #[derive(Clone, Copy)]
+    struct Case {
+        p: f64,
+        k: i32,
+        net: i32,
+        tier: i32,
+        seed: u64,
+    }
+
+    fn assert_relative_close(
+        metric: &str,
+        mc: f64,
+        exact: f64,
+        rel_tolerance: f64,
+        abs_floor: f64,
+    ) {
+        let diff = (mc - exact).abs();
+        let allowed = (exact.abs() * rel_tolerance).max(abs_floor);
+        assert!(
+            diff <= allowed,
+            "{} mismatch: mc={:.6}, exact={:.6}, diff={:.6}, allowed={:.6}",
+            metric,
+            mc,
+            exact,
+            diff,
+            allowed
+        );
+    }
+
+    fn simulate_segment_once<R: Rng>(
+        rng: &mut R,
+        p: f64,
+        k: i32,
+        start_net: i32,
+        v_floor: bool,
+    ) -> (usize, bool) {
+        let mut matches = 0usize;
+
+        if v_floor {
+            let mut state = start_net.clamp(0, k - 1);
+            for _ in 0..MAX_STEPS {
+                if state >= k {
+                    return (matches, true);
+                }
+
+                matches += 1;
+                let win = rng.gen_bool(p);
+                if win {
+                    if state == 0 {
+                        state = 1;
+                    } else {
+                        state += 1;
+                    }
+                } else if state > 0 {
+                    state -= 1;
+                }
+            }
+
+            panic!("segment simulation exceeded max-steps in v-floor mode");
+        }
+
+        let mut state = start_net.clamp(-2, k - 1);
+        for _ in 0..MAX_STEPS {
+            if state >= k {
+                return (matches, true);
+            }
+            if state <= -3 {
+                return (matches, false);
+            }
+
+            matches += 1;
+            let win = rng.gen_bool(p);
+            if win {
+                if state < 0 {
+                    state = 1;
+                } else {
+                    state += 1;
+                }
+            } else {
+                state -= 1;
+            }
+        }
+
+        panic!("segment simulation exceeded max-steps in non-floor mode");
+    }
+
+    fn simulate_to_current_tier_i_once<R: Rng>(rng: &mut R, case: Case) -> usize {
+        if case.tier >= 4 {
+            return 0;
+        }
+
+        let mut tier = case.tier;
+        let mut first = true;
+        let mut total = 0usize;
+
+        for _ in 0..MAX_STEPS {
+            if tier >= 4 {
+                return total;
+            }
+
+            let start_net = if first { case.net } else { 0 };
+            first = false;
+
+            let (m, promoted) =
+                simulate_segment_once(rng, case.p, case.k, start_net, tier == 0);
+            total += m;
+
+            if promoted {
+                tier += 1;
+            } else if tier > 0 {
+                tier -= 1;
+            }
+        }
+
+        panic!("simulate_to_current_tier_i_once exceeded max-steps");
+    }
+
+    fn simulate_to_next_big_tier_v_once<R: Rng>(rng: &mut R, case: Case) -> usize {
+        let mut tier = case.tier;
+        let mut first = true;
+        let mut total = 0usize;
+
+        for _ in 0..MAX_STEPS {
+            let start_net = if first { case.net } else { 0 };
+            first = false;
+
+            let (m, promoted) =
+                simulate_segment_once(rng, case.p, case.k, start_net, tier == 0);
+            total += m;
+
+            if promoted {
+                if tier >= 4 {
+                    return total;
+                }
+                tier += 1;
+            } else if tier > 0 {
+                tier -= 1;
+            }
+        }
+
+        panic!("simulate_to_next_big_tier_v_once exceeded max-steps");
+    }
+
+    fn monte_carlo_validate_case(case: Case) {
+        let exact = calculate_rank_progress_stats(case.p, case.k, case.net, case.tier);
+        let mut rng = ChaCha8Rng::seed_from_u64(case.seed);
+
+        let mut leave_sum = 0.0;
+        let mut promote_count = 0.0;
+        let mut to_i_sum = 0.0;
+        let mut to_next_v_sum = 0.0;
+
+        for _ in 0..TRIALS {
+            let (leave_m, promoted) =
+                simulate_segment_once(&mut rng, case.p, case.k, case.net, case.tier == 0);
+            leave_sum += leave_m as f64;
+            if promoted {
+                promote_count += 1.0;
+            }
+
+            to_i_sum += simulate_to_current_tier_i_once(&mut rng, case) as f64;
+            to_next_v_sum += simulate_to_next_big_tier_v_once(&mut rng, case) as f64;
+        }
+
+        let leave_mc = leave_sum / TRIALS as f64;
+        let promote_mc = promote_count / TRIALS as f64;
+        let to_i_mc = to_i_sum / TRIALS as f64;
+        let to_next_v_mc = to_next_v_sum / TRIALS as f64;
+
+        assert_relative_close(
+            "leave_expected",
+            leave_mc,
+            exact.leave_current_segment_expected,
+            EXPECTED_REL_TOLERANCE,
+            EXPECTED_ABS_FLOOR,
+        );
+        assert_relative_close(
+            "promotion_probability",
+            promote_mc,
+            exact.current_segment_promotion_probability,
+            PROBABILITY_REL_TOLERANCE,
+            PROBABILITY_ABS_FLOOR,
+        );
+        assert_relative_close(
+            "to_current_tier_i",
+            to_i_mc,
+            exact.expected_to_current_tier_i,
+            EXPECTED_REL_TOLERANCE,
+            EXPECTED_ABS_FLOOR,
+        );
+        assert_relative_close(
+            "to_next_big_tier_v",
+            to_next_v_mc,
+            exact.expected_to_next_big_tier_v,
+            EXPECTED_REL_TOLERANCE,
+            EXPECTED_ABS_FLOOR,
+        );
+    }
+
+    #[test]
+    fn monte_carlo_matches_formulas_k4() {
+        monte_carlo_validate_case(Case {
+            p: 0.6,
+            k: 4,
+            net: 0,
+            tier: 0,
+            seed: 114_514,
+        });
+    }
+
+    #[test]
+    fn monte_carlo_matches_formulas_k5() {
+        monte_carlo_validate_case(Case {
+            p: 0.52,
+            k: 5,
+            net: 0,
+            tier: 4,
+            seed: 9,
+        });
     }
 }

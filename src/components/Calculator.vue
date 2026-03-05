@@ -354,64 +354,49 @@ const createMartingaleFn = (p: number) => {
   };
 };
 
-const calculateK4ExpectedMatches = (
-  p: number,
-  p2: number,
-  p3: number,
-  p4: number,
-  p5: number,
-  p6: number,
-  currentNetWinsValue: number
+const calculateNonFloorSegmentExpectedJs = (
+  pValue: number,
+  kValue: RankK,
+  netWinsValue: number
 ): number => {
-  const denom = p6 - 5.0 * p5 + 11.0 * p4 - 13.0 * p3 + 11.0 * p2 - 5.0 * p + 1.0;
+  const start = Math.floor(clamp(netWinsValue, -2, kValue - 1));
+  const qValue = 1 - pValue;
 
-  switch (currentNetWinsValue) {
-    case -2:
-      return (2.0 * p5 - 4.0 * p4 - p3 + 10.0 * p2 - 6.0 * p + 3.0) / denom;
-    case -1:
-      return (-p5 + 5.0 * p4 - 11.0 * p3 + 15.0 * p2 - 9.0 * p + 4.0) / denom;
-    case 0:
-      return (p5 - 2.0 * p4 - 3.0 * p3 + 13.0 * p2 - 12.0 * p + 5.0) / denom;
-    case 1:
-      return (-2.0 * p4 + 2.0 * p3 + 5.0 * p2 - 3.0 * p + 2.0) / denom;
-    case 2:
-      return (2.0 * p4 + 2.0 * p3 + p2 - p + 1.0) / denom;
-    case 3:
-      return (-2.0 * p5 + 12.0 * p4 - 29.0 * p3 + 36.0 * p2 - 22.0 * p + 6.0) / denom;
-    default:
-      return Number.POSITIVE_INFINITY;
+  const states: number[] = [];
+  for (let state = -2; state <= kValue - 1; state += 1) {
+    states.push(state);
   }
-};
 
-const calculateK5ExpectedMatches = (
-  p: number,
-  p2: number,
-  p3: number,
-  p4: number,
-  p5: number,
-  p6: number,
-  currentNetWinsValue: number
-): number => {
-  const denom = 2.0 * p6 - 10.0 * p5 + 22.0 * p4 - 24.0 * p3 + 16.0 * p2 - 6.0 * p + 1.0;
+  const size = states.length;
+  const matrix: number[][] = Array.from({ length: size }, () => Array(size).fill(0));
+  const vector: number[] = Array(size).fill(1);
 
-  switch (currentNetWinsValue) {
-    case -2:
-      return (3.0 * p4 + 3.0 * p3 - 2.0 * p + 1.0) / denom;
-    case -1:
-      return (3.0 * p6 - 6.0 * p4 + 3.0 * p3 - 8.0 * p2 + 5.0 * p - 2.0) / denom;
-    case 0:
-      return (3.0 * p6 - 9.0 * p5 + 12.0 * p4 - 11.0 * p3 + 16.0 * p2 - 9.0 * p + 3.0) / denom;
-    case 1:
-      return (-2.0 * p5 + 10.0 * p4 - 19.0 * p3 + 24.0 * p2 - 13.0 * p + 4.0) / denom;
-    case 2:
-      return (3.0 * p6 - 14.0 * p5 + 29.0 * p4 - 35.0 * p3 + 32.0 * p2 - 17.0 * p + 5.0) / denom;
-    case 3:
-      return (-p5 + 8.0 * p4 - 22.0 * p3 + 32.0 * p2 - 21.0 * p + 6.0) / denom;
-    case 4:
-      return (3.0 * p6 - 19.0 * p5 + 52.0 * p4 - 78.0 * p3 + 69.0 * p2 - 33.0 * p + 7.0) / denom;
-    default:
+  for (let row = 0; row < size; row += 1) {
+    const rowRef = matrix[row];
+    const state = states[row];
+    if (!rowRef || state === undefined) {
       return Number.POSITIVE_INFINITY;
+    }
+
+    rowRef[row] = 1;
+
+    const nextWin = state < 0 ? 1 : state + 1;
+    if (nextWin >= -2 && nextWin <= kValue - 1) {
+      rowRef[nextWin + 2] = (rowRef[nextWin + 2] ?? 0) - pValue;
+    }
+
+    const nextLose = state - 1;
+    if (nextLose >= -2 && nextLose <= kValue - 1) {
+      rowRef[nextLose + 2] = (rowRef[nextLose + 2] ?? 0) - qValue;
+    }
   }
+
+  const solved = solveLinearSystem(matrix, vector);
+  if (!solved) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  return solved[start + 2] ?? Number.POSITIVE_INFINITY;
 };
 
 const calculateSegmentStatsJs = (pRaw: number, kValue: RankK, netWinsValue: number): SegmentStats => {
@@ -443,16 +428,7 @@ const calculateSegmentStatsJs = (pRaw: number, kValue: RankK, netWinsValue: numb
   const promotionProbability =
     (martingale(netWinsValue) - martingale(-3)) / (martingale(kValue) - martingale(-3));
 
-  const p2 = pValue * pValue;
-  const p3 = p2 * pValue;
-  const p4 = p3 * pValue;
-  const p5 = p4 * pValue;
-  const p6 = p5 * pValue;
-
-  const expectedMatches =
-    kValue === 4
-      ? calculateK4ExpectedMatches(pValue, p2, p3, p4, p5, p6, netWinsValue)
-      : calculateK5ExpectedMatches(pValue, p2, p3, p4, p5, p6, netWinsValue);
+  const expectedMatches = calculateNonFloorSegmentExpectedJs(pValue, kValue, netWinsValue);
 
   return {
     expectedMatches: Math.max(expectedMatches, 0),
