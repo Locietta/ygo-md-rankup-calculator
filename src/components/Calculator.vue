@@ -152,7 +152,7 @@
                 胜率 = {{ winRate.toFixed(1) }}%
               </v-chip>
               <v-chip size="small" color="secondary" variant="tonal" class="mb-2">
-                单段求解：{{ solverMode }}
+                求解后端：{{ solverMode }}
               </v-chip>
             </div>
           </template>
@@ -186,7 +186,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import init, { calculate_rank_stats_formulas } from "wasm";
+import init, { calculate_rank_progress_stats } from "wasm";
 
 type RankK = 4 | 5;
 type SubtierValue = 0 | 1 | 2 | 3 | 4; // 0:V, 4:I
@@ -211,9 +211,11 @@ interface CalculationResult {
   expectedToNextBigTierV: number;
 }
 
-interface WasmRankStats {
-  expected_matches: number;
-  promotion_probability: number;
+interface WasmRankProgressStats {
+  leave_current_segment_expected: number;
+  current_segment_promotion_probability: number;
+  expected_to_current_tier_i: number;
+  expected_to_next_big_tier_v: number;
 }
 
 interface FormValidator {
@@ -242,7 +244,7 @@ const currentNetWins = ref<number>(0);
 const winRate = ref<number>(55);
 
 const isLoading = ref(false);
-const solverMode = ref<"WASM闭式" | "JS闭式">("WASM闭式");
+const solverMode = ref<"WASM整链路" | "JS整链路">("WASM整链路");
 const wasmReady = ref(false);
 const results = ref<CalculationResult | null>(null);
 
@@ -273,12 +275,12 @@ onMounted(async () => {
   try {
     await init();
     wasmReady.value = true;
-    solverMode.value = "WASM闭式";
+    solverMode.value = "WASM整链路";
   } catch (error) {
     console.error("WASM init failed, fallback to JS formulas", error);
     wasmReady.value = false;
-    solverMode.value = "JS闭式";
-    showSnackbar("WASM 加载失败，已自动切换 JS 闭式", "warning", "mdi-alert");
+    solverMode.value = "JS整链路";
+    showSnackbar("WASM 加载失败，已自动切换 JS 整链路", "warning", "mdi-alert");
   }
 });
 
@@ -427,27 +429,6 @@ const calculateSegmentStatsJs = (pRaw: number, kValue: RankK, netWinsValue: numb
     expectedMatches: Math.max(expectedMatches, 0),
     promotionProbability: clamp(promotionProbability, 0, 1),
   };
-};
-
-const calculateSegmentStats = (pValue: number, kValue: RankK, netWinsValue: number): SegmentStats => {
-  if (!wasmReady.value) {
-    solverMode.value = "JS闭式";
-    return calculateSegmentStatsJs(pValue, kValue, netWinsValue);
-  }
-
-  try {
-    const wasmStats = calculate_rank_stats_formulas(pValue, kValue, netWinsValue) as WasmRankStats;
-    solverMode.value = "WASM闭式";
-
-    return {
-      expectedMatches: Math.max(wasmStats.expected_matches, 0),
-      promotionProbability: clamp(wasmStats.promotion_probability, 0, 1),
-    };
-  } catch (error) {
-    console.warn("WASM closed form failed. Fallback to JS", error);
-    solverMode.value = "JS闭式";
-    return calculateSegmentStatsJs(pValue, kValue, netWinsValue);
-  }
 };
 
 const solveLinearSystem = (matrix: number[][], vector: number[]): number[] | null => {
@@ -634,6 +615,23 @@ const computeExpectedToNextBigTierV = (
   return solved[currentTier] ?? Number.POSITIVE_INFINITY;
 };
 
+const calculateRankProgressStatsJs = (
+  pValue: number,
+  kValue: RankK,
+  currentNetWinsValue: number,
+  currentTier: SubtierValue
+): CalculationResult => {
+  const currentStats = calculateSegmentStatsJs(pValue, kValue, currentNetWinsValue);
+  const baseStats = calculateSegmentStatsJs(pValue, kValue, 0);
+
+  return {
+    leaveCurrentSegmentExpected: currentStats.expectedMatches,
+    currentSegmentPromotionProbability: currentStats.promotionProbability,
+    expectedToCurrentTierI: computeExpectedToCurrentTierI(currentTier, currentStats, baseStats),
+    expectedToNextBigTierV: computeExpectedToNextBigTierV(currentTier, currentStats, baseStats),
+  };
+};
+
 const formatMatches = (value: number): string => {
   if (!Number.isFinite(value)) {
     return "∞";
@@ -664,15 +662,35 @@ const handleCalculate = async (): Promise<void> => {
     const currentNet = currentNetWins.value;
     const currentTier = currentSubtier.value;
 
-    const currentStats = calculateSegmentStats(p, k, currentNet);
-    const baseStats = calculateSegmentStats(p, k, 0);
+    if (wasmReady.value) {
+      try {
+        const wasmResult = calculate_rank_progress_stats(
+          p,
+          k,
+          currentNet,
+          currentTier
+        ) as WasmRankProgressStats;
 
-    results.value = {
-      leaveCurrentSegmentExpected: currentStats.expectedMatches,
-      currentSegmentPromotionProbability: currentStats.promotionProbability,
-      expectedToCurrentTierI: computeExpectedToCurrentTierI(currentTier, currentStats, baseStats),
-      expectedToNextBigTierV: computeExpectedToNextBigTierV(currentTier, currentStats, baseStats),
-    };
+        solverMode.value = "WASM整链路";
+        results.value = {
+          leaveCurrentSegmentExpected: Math.max(wasmResult.leave_current_segment_expected, 0),
+          currentSegmentPromotionProbability: clamp(
+            wasmResult.current_segment_promotion_probability,
+            0,
+            1
+          ),
+          expectedToCurrentTierI: wasmResult.expected_to_current_tier_i,
+          expectedToNextBigTierV: wasmResult.expected_to_next_big_tier_v,
+        };
+      } catch (error) {
+        console.warn("WASM full pipeline failed, fallback to JS full pipeline", error);
+        solverMode.value = "JS整链路";
+        results.value = calculateRankProgressStatsJs(p, k, currentNet, currentTier);
+      }
+    } else {
+      solverMode.value = "JS整链路";
+      results.value = calculateRankProgressStatsJs(p, k, currentNet, currentTier);
+    }
 
     showSnackbar("计算完成", "success", "mdi-check-circle-outline", 2200);
   } catch (error) {

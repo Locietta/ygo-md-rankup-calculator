@@ -1,5 +1,7 @@
 use wasm_bindgen::prelude::*;
 
+const EPS: f64 = 1e-12;
+
 #[wasm_bindgen]
 pub struct RankStats {
     pub expected_matches: f64,
@@ -7,7 +9,61 @@ pub struct RankStats {
 }
 
 #[wasm_bindgen]
+pub struct RankProgressStats {
+    pub leave_current_segment_expected: f64,
+    pub current_segment_promotion_probability: f64,
+    pub expected_to_current_tier_i: f64,
+    pub expected_to_next_big_tier_v: f64,
+}
+
+#[wasm_bindgen]
 pub fn calculate_rank_stats_formulas(p: f64, k_val: i32, current_net_wins_val: i32) -> RankStats {
+    calculate_rank_stats_formulas_internal(p, k_val, current_net_wins_val)
+}
+
+#[wasm_bindgen]
+pub fn calculate_rank_progress_stats(
+    p: f64,
+    k_val: i32,
+    current_net_wins_val: i32,
+    current_subtier_val: i32,
+) -> RankProgressStats {
+    if !(k_val == 4 || k_val == 5) {
+        return RankProgressStats {
+            leave_current_segment_expected: f64::INFINITY,
+            current_segment_promotion_probability: f64::NAN,
+            expected_to_current_tier_i: f64::INFINITY,
+            expected_to_next_big_tier_v: f64::INFINITY,
+        };
+    }
+
+    if !(0..=4).contains(&current_subtier_val) {
+        return RankProgressStats {
+            leave_current_segment_expected: f64::INFINITY,
+            current_segment_promotion_probability: f64::NAN,
+            expected_to_current_tier_i: f64::INFINITY,
+            expected_to_next_big_tier_v: f64::INFINITY,
+        };
+    }
+
+    let current_stats = calculate_rank_stats_formulas_internal(p, k_val, current_net_wins_val);
+    let base_stats = calculate_rank_stats_formulas_internal(p, k_val, 0);
+    let current_tier = current_subtier_val as usize;
+
+    let expected_to_current_tier_i =
+        compute_expected_to_current_tier_i(current_tier, &current_stats, &base_stats);
+    let expected_to_next_big_tier_v =
+        compute_expected_to_next_big_tier_v(current_tier, &current_stats, &base_stats);
+
+    RankProgressStats {
+        leave_current_segment_expected: current_stats.expected_matches,
+        current_segment_promotion_probability: current_stats.promotion_probability,
+        expected_to_current_tier_i,
+        expected_to_next_big_tier_v,
+    }
+}
+
+fn calculate_rank_stats_formulas_internal(p: f64, k_val: i32, current_net_wins_val: i32) -> RankStats {
     // Early validation and edge cases first
     if k_val != 4 && k_val != 5 {
         return RankStats {
@@ -68,6 +124,146 @@ pub fn calculate_rank_stats_formulas(p: f64, k_val: i32, current_net_wins_val: i
         expected_matches: expected_matches.max(0.0),
         promotion_probability: promotion_probability.max(0.0).min(1.0),
     }
+}
+
+fn solve_linear_system(matrix: &[Vec<f64>], vector: &[f64]) -> Option<Vec<f64>> {
+    let n = matrix.len();
+    if n == 0 || vector.len() != n {
+        return None;
+    }
+
+    let mut a = matrix.to_vec();
+    let mut b = vector.to_vec();
+
+    for col in 0..n {
+        let mut pivot = col;
+        for row in (col + 1)..n {
+            if a[row][col].abs() > a[pivot][col].abs() {
+                pivot = row;
+            }
+        }
+
+        if a[pivot][col].abs() < EPS {
+            return None;
+        }
+
+        a.swap(col, pivot);
+        b.swap(col, pivot);
+
+        let pivot_value = a[col][col];
+        for j in col..n {
+            a[col][j] /= pivot_value;
+        }
+        b[col] /= pivot_value;
+
+        for row in 0..n {
+            if row == col {
+                continue;
+            }
+
+            let factor = a[row][col];
+            if factor.abs() < EPS {
+                continue;
+            }
+
+            for j in col..n {
+                a[row][j] -= factor * a[col][j];
+            }
+            b[row] -= factor * b[col];
+        }
+    }
+
+    Some(b)
+}
+
+fn compute_expected_to_current_tier_i(
+    current_tier: usize,
+    current_stats: &RankStats,
+    base_stats: &RankStats,
+) -> f64 {
+    if current_tier >= 4 {
+        return 0.0;
+    }
+
+    if base_stats.promotion_probability <= EPS {
+        return f64::INFINITY;
+    }
+
+    // State order: V, IV, III, II. I is absorbing target.
+    let size = 4;
+    let mut matrix = vec![vec![0.0; size]; size];
+    let mut vector = vec![0.0; size];
+
+    for tier in 0..size {
+        let stats = if tier == current_tier {
+            current_stats
+        } else {
+            base_stats
+        };
+        let up = stats.promotion_probability;
+        let down = 1.0 - up;
+
+        vector[tier] = stats.expected_matches;
+
+        if tier == 0 {
+            matrix[tier][tier] = up;
+            matrix[tier][tier + 1] = -up;
+            continue;
+        }
+
+        matrix[tier][tier] = 1.0;
+        matrix[tier][tier - 1] = -down;
+        if tier + 1 < size {
+            matrix[tier][tier + 1] = -up;
+        }
+    }
+
+    solve_linear_system(&matrix, &vector)
+        .and_then(|solved| solved.get(current_tier).copied())
+        .unwrap_or(f64::INFINITY)
+}
+
+fn compute_expected_to_next_big_tier_v(
+    current_tier: usize,
+    current_stats: &RankStats,
+    base_stats: &RankStats,
+) -> f64 {
+    if base_stats.promotion_probability <= EPS {
+        return f64::INFINITY;
+    }
+
+    // State order: V, IV, III, II, I. Next big-tier V is absorbing target.
+    let size = 5;
+    let mut matrix = vec![vec![0.0; size]; size];
+    let mut vector = vec![0.0; size];
+
+    for tier in 0..size {
+        let stats = if tier == current_tier {
+            current_stats
+        } else {
+            base_stats
+        };
+        let up = stats.promotion_probability;
+        let down = 1.0 - up;
+
+        vector[tier] = stats.expected_matches;
+
+        if tier == 0 {
+            matrix[tier][tier] = up;
+            matrix[tier][tier + 1] = -up;
+            continue;
+        }
+
+        matrix[tier][tier] = 1.0;
+        matrix[tier][tier - 1] = -down;
+        if tier < 4 {
+            matrix[tier][tier + 1] = -up;
+        }
+    }
+
+    solve_linear_system(&matrix, &vector)
+        .and_then(|solved| solved.get(current_tier).copied())
+        .unwrap_or(f64::INFINITY)
 }
 
 #[inline]
