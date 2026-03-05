@@ -1,9 +1,18 @@
 <template>
   <v-container class="calculator-page py-6 py-md-10">
-    <section class="hero mb-6 mb-md-8">
+    <section class="hero mb-3 mb-md-4">
       <p class="hero-kicker">Yu-Gi-Oh! Master Duel</p>
       <h1 class="hero-title">段位升降与大段期望计算器</h1>
-      <p class="hero-subtitle">
+    </section>
+
+    <v-alert
+      class="intro-alert mb-6 mb-md-8"
+      variant="tonal"
+      density="compact"
+      icon="mdi-information-outline"
+      color="info"
+    >
+      <p class="intro-alert-text">
         原理可以参看我的博客文章：
         <a
           href="https://blog.locietta.xyz/posts/possibility-calculation-2"
@@ -13,7 +22,7 @@
           游戏王MD中的概率问题（二）：Bo2与升降段
         </a>
       </p>
-    </section>
+    </v-alert>
 
     <v-row class="ga-4 ga-md-6" align="stretch">
       <v-col cols="12" lg="5">
@@ -851,24 +860,23 @@ const handleCalculate = async (): Promise<void> => {
   font-family: "Noto Serif SC", "Source Han Serif SC", serif;
 }
 
-.hero-subtitle {
+.intro-alert-text {
   margin: 0;
-  max-width: 780px;
-  font-size: 0.98rem;
-  line-height: 1.6;
-  opacity: 0.95;
+  font-size: 0.88rem;
+  line-height: 1.5;
 }
 
-.hero-subtitle a {
-  color: #8fe8ff;
+.intro-alert a {
+  color: #0b3f75;
   text-decoration: underline;
   text-decoration-thickness: 2px;
   text-underline-offset: 3px;
   transition: color 0.2s ease;
+  font-weight: 600;
 }
 
-.hero-subtitle a:hover {
-  color: #ffd08f;
+.intro-alert a:hover {
+  color: #7a2f00;
 }
 
 .panel {
