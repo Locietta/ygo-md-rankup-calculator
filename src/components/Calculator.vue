@@ -129,13 +129,17 @@
               <v-col cols="12" sm="6">
                 <v-card class="metric metric-a" rounded="lg" variant="tonal">
                   <p class="metric-title">离开当前小段期望局数</p>
-                  <p class="metric-value">{{ formatMatches(results.leaveCurrentSegmentExpected) }}</p>
+                  <p class="metric-value">
+                    {{ formatMatches(results.leaveCurrentSegmentExpected) }}
+                  </p>
                 </v-card>
               </v-col>
               <v-col cols="12" sm="6">
                 <v-card class="metric metric-b" rounded="lg" variant="tonal">
                   <p class="metric-title">当前小段升段概率</p>
-                  <p class="metric-value">{{ formatPercent(results.currentSegmentPromotionProbability) }}</p>
+                  <p class="metric-value">
+                    {{ formatPercent(results.currentSegmentPromotionProbability) }}
+                  </p>
                 </v-card>
               </v-col>
               <v-col cols="12" sm="6">
@@ -287,7 +291,7 @@ const showSnackbar = (
   text: string,
   color = "info",
   icon = "mdi-information",
-  timeout = 4000
+  timeout = 4000,
 ): void => {
   snackbar.value = {
     visible: true,
@@ -314,7 +318,7 @@ onMounted(async () => {
 const maxNetWins = computed(() => rankType.value - 1);
 const minNetWins = computed(() => (currentSubtier.value === 0 ? 0 : -2));
 const currentRankTypeConfig = computed(
-  () => rankTypeOptions.find((option) => option.value === rankType.value) ?? defaultRankTypeConfig
+  () => rankTypeOptions.find((option) => option.value === rankType.value) ?? defaultRankTypeConfig,
 );
 const isHighestBigTier = computed(() => currentRankTypeConfig.value.isHighestBigTier);
 const currentNetWinsHint = computed(() => {
@@ -328,7 +332,7 @@ const currentNetWinsHint = computed(() => {
 });
 
 const currentSubtierLabel = computed(
-  () => subtierOptions.find((option) => option.value === currentSubtier.value)?.label ?? "-"
+  () => subtierOptions.find((option) => option.value === currentSubtier.value)?.label ?? "-",
 );
 
 const winRateRules = [
@@ -393,7 +397,7 @@ const createMartingaleFn = (p: number) => {
 const calculateNonFloorSegmentExpectedJs = (
   pValue: number,
   kValue: RankK,
-  netWinsValue: number
+  netWinsValue: number,
 ): number => {
   const start = Math.floor(clamp(netWinsValue, -2, kValue - 1));
   const qValue = 1 - pValue;
@@ -435,7 +439,11 @@ const calculateNonFloorSegmentExpectedJs = (
   return solved[start + 2] ?? Number.POSITIVE_INFINITY;
 };
 
-const calculateSegmentStatsJs = (pRaw: number, kValue: RankK, netWinsValue: number): SegmentStats => {
+const calculateSegmentStatsJs = (
+  pRaw: number,
+  kValue: RankK,
+  netWinsValue: number,
+): SegmentStats => {
   const pValue = clamp(pRaw, 0, 1);
 
   if (pValue <= 0.0) {
@@ -475,7 +483,7 @@ const calculateSegmentStatsJs = (pRaw: number, kValue: RankK, netWinsValue: numb
 const calculateVFloorSegmentStatsJs = (
   pRaw: number,
   kValue: RankK,
-  netWinsValue: number
+  netWinsValue: number,
 ): SegmentStats => {
   const pValue = clamp(pRaw, 0, 1);
   const qValue = 1 - pValue;
@@ -625,7 +633,7 @@ const computeExpectedToCurrentTierI = (
   currentTier: SubtierValue,
   currentStats: SegmentStats,
   baseStats: SegmentStats,
-  vFloorBaseStats: SegmentStats
+  vFloorBaseStats: SegmentStats,
 ): number => {
   if (currentTier === 4) {
     return 0;
@@ -676,7 +684,7 @@ const computeExpectedToNextBigTierV = (
   currentTier: SubtierValue,
   currentStats: SegmentStats,
   baseStats: SegmentStats,
-  vFloorBaseStats: SegmentStats
+  vFloorBaseStats: SegmentStats,
 ): number => {
   if (baseStats.promotionProbability <= EPS) {
     return Number.POSITIVE_INFINITY;
@@ -723,7 +731,7 @@ const calculateRankProgressStatsJs = (
   pValue: number,
   kValue: RankK,
   currentNetWinsValue: number,
-  currentTier: SubtierValue
+  currentTier: SubtierValue,
 ): CalculationResult => {
   const currentStats =
     currentTier === 0
@@ -739,13 +747,13 @@ const calculateRankProgressStatsJs = (
       currentTier,
       currentStats,
       baseStats,
-      vFloorBaseStats
+      vFloorBaseStats,
     ),
     expectedToNextBigTierV: computeExpectedToNextBigTierV(
       currentTier,
       currentStats,
       baseStats,
-      vFloorBaseStats
+      vFloorBaseStats,
     ),
   };
 };
@@ -786,7 +794,7 @@ const handleCalculate = async (): Promise<void> => {
           p,
           k,
           currentNet,
-          currentTier
+          currentTier,
         ) as WasmRankProgressStats;
 
         solverMode.value = "WASM";
@@ -795,7 +803,7 @@ const handleCalculate = async (): Promise<void> => {
           currentSegmentPromotionProbability: clamp(
             wasmResult.current_segment_promotion_probability,
             0,
-            1
+            1,
           ),
           expectedToCurrentTierI: wasmResult.expected_to_current_tier_i,
           expectedToNextBigTierV: wasmResult.expected_to_next_big_tier_v,
@@ -823,6 +831,43 @@ const handleCalculate = async (): Promise<void> => {
 <style scoped>
 .calculator-page {
   max-width: 1240px;
+  --intro-link-color: #0b3f75;
+  --intro-link-hover-color: #7a2f00;
+  --panel-bg: rgba(255, 255, 255, 0.9);
+  --panel-border: rgba(255, 255, 255, 0.72);
+  --panel-title-color: #14384f;
+  --winrate-box-bg: linear-gradient(148deg, rgba(255, 255, 255, 0.92), rgba(236, 251, 247, 0.96));
+  --winrate-box-border: rgba(106, 181, 209, 0.3);
+  --winrate-box-inset-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+  --winrate-label-color: #24566f;
+  --winrate-value-color: #1f5f80;
+  --metric-title-color: #385468;
+  --metric-value-color: #052c3d;
+  --empty-state-color: #526778;
+  --metric-a-bg: linear-gradient(145deg, rgba(82, 176, 255, 0.18), rgba(62, 129, 221, 0.2));
+  --metric-b-bg: linear-gradient(145deg, rgba(69, 194, 141, 0.2), rgba(50, 160, 122, 0.22));
+  --metric-c-bg: linear-gradient(145deg, rgba(255, 186, 77, 0.2), rgba(246, 149, 66, 0.22));
+  --metric-d-bg: linear-gradient(145deg, rgba(255, 145, 128, 0.22), rgba(244, 108, 108, 0.22));
+}
+
+:global(.v-theme--dark) .calculator-page {
+  --intro-link-color: #95d2ff;
+  --intro-link-hover-color: #ffd7b5;
+  --panel-bg: rgba(17, 27, 39, 0.88);
+  --panel-border: rgba(132, 169, 200, 0.24);
+  --panel-title-color: #e4f2ff;
+  --winrate-box-bg: linear-gradient(148deg, rgba(19, 32, 47, 0.95), rgba(15, 48, 50, 0.92));
+  --winrate-box-border: rgba(85, 154, 196, 0.42);
+  --winrate-box-inset-shadow: inset 0 1px 0 rgba(181, 220, 255, 0.14);
+  --winrate-label-color: #b6d8ed;
+  --winrate-value-color: #d4ebff;
+  --metric-title-color: #a9c9de;
+  --metric-value-color: #ebf6ff;
+  --empty-state-color: #9db6ca;
+  --metric-a-bg: linear-gradient(145deg, rgba(83, 153, 227, 0.28), rgba(48, 97, 167, 0.28));
+  --metric-b-bg: linear-gradient(145deg, rgba(50, 146, 125, 0.3), rgba(35, 107, 93, 0.32));
+  --metric-c-bg: linear-gradient(145deg, rgba(188, 128, 46, 0.3), rgba(152, 93, 36, 0.32));
+  --metric-d-bg: linear-gradient(145deg, rgba(178, 92, 94, 0.3), rgba(144, 67, 82, 0.32));
 }
 
 .hero {
@@ -842,7 +887,11 @@ const handleCalculate = async (): Promise<void> => {
   width: 260px;
   height: 260px;
   border-radius: 50%;
-  background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.08));
+  background: radial-gradient(
+    circle at 30% 30%,
+    rgba(255, 255, 255, 0.35),
+    rgba(255, 255, 255, 0.08)
+  );
 }
 
 .hero-kicker {
@@ -867,7 +916,7 @@ const handleCalculate = async (): Promise<void> => {
 }
 
 .intro-alert a {
-  color: #0b3f75;
+  color: var(--intro-link-color);
   text-decoration: underline;
   text-decoration-thickness: 2px;
   text-underline-offset: 3px;
@@ -876,13 +925,13 @@ const handleCalculate = async (): Promise<void> => {
 }
 
 .intro-alert a:hover {
-  color: #7a2f00;
+  color: var(--intro-link-hover-color);
 }
 
 .panel {
   padding: 1.2rem;
-  background: rgba(255, 255, 255, 0.9);
-  border: 1px solid rgba(255, 255, 255, 0.72);
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
   backdrop-filter: blur(8px);
 }
 
@@ -901,13 +950,14 @@ const handleCalculate = async (): Promise<void> => {
   margin: 0;
   font-size: 1.05rem;
   font-weight: 700;
+  color: var(--panel-title-color);
 }
 
 .winrate-box {
   padding: 1rem 1rem 0.95rem;
-  background: linear-gradient(148deg, rgba(255, 255, 255, 0.92), rgba(236, 251, 247, 0.96));
-  border: 1px solid rgba(106, 181, 209, 0.3);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+  background: var(--winrate-box-bg);
+  border: 1px solid var(--winrate-box-border);
+  box-shadow: var(--winrate-box-inset-shadow);
 }
 
 .winrate-head {
@@ -917,14 +967,14 @@ const handleCalculate = async (): Promise<void> => {
 .winrate-label {
   font-size: 0.96rem;
   font-weight: 600;
-  color: #24566f;
+  color: var(--winrate-label-color);
   letter-spacing: 0.01em;
 }
 
 .winrate-value {
   font-size: 1.02rem;
   font-weight: 700;
-  color: #1f5f80;
+  color: var(--winrate-value-color);
 }
 
 .winrate-slider {
@@ -951,7 +1001,7 @@ const handleCalculate = async (): Promise<void> => {
 .metric-title {
   margin: 0;
   font-size: 0.84rem;
-  color: #385468;
+  color: var(--metric-title-color);
 }
 
 .metric-value {
@@ -959,23 +1009,23 @@ const handleCalculate = async (): Promise<void> => {
   font-size: 1.52rem;
   font-weight: 700;
   line-height: 1.2;
-  color: #052c3d;
+  color: var(--metric-value-color);
 }
 
 .metric-a {
-  background: linear-gradient(145deg, rgba(82, 176, 255, 0.18), rgba(62, 129, 221, 0.2));
+  background: var(--metric-a-bg);
 }
 
 .metric-b {
-  background: linear-gradient(145deg, rgba(69, 194, 141, 0.2), rgba(50, 160, 122, 0.22));
+  background: var(--metric-b-bg);
 }
 
 .metric-c {
-  background: linear-gradient(145deg, rgba(255, 186, 77, 0.2), rgba(246, 149, 66, 0.22));
+  background: var(--metric-c-bg);
 }
 
 .metric-d {
-  background: linear-gradient(145deg, rgba(255, 145, 128, 0.22), rgba(244, 108, 108, 0.22));
+  background: var(--metric-d-bg);
 }
 
 .empty-state {
@@ -984,7 +1034,7 @@ const handleCalculate = async (): Promise<void> => {
   place-items: center;
   text-align: center;
   gap: 0.65rem;
-  color: #526778;
+  color: var(--empty-state-color);
 }
 
 .meta {
@@ -1011,7 +1061,6 @@ const handleCalculate = async (): Promise<void> => {
     row-gap: 1.5rem;
   }
 }
-
 </style>
 
 <style>
@@ -1039,5 +1088,13 @@ const handleCalculate = async (): Promise<void> => {
 .rank-select-menu .v-ripple__animation {
   color: #42a5f5 !important;
   opacity: 0.22 !important;
+}
+
+.v-theme--dark .rank-select-menu .v-list-item {
+  color: #d8eaf8 !important;
+}
+
+.v-theme--dark .rank-select-menu .v-list-item--active .v-list-item-title {
+  color: #f2f8ff !important;
 }
 </style>
