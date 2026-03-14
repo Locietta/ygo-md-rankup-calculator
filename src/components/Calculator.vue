@@ -661,7 +661,7 @@ const computeExpectedToCurrentTierI = (
       return Number.POSITIVE_INFINITY;
     }
 
-    const stats = tier === currentTier ? currentStats : tier === 0 ? vFloorBaseStats : baseStats;
+    const stats = tier === 0 ? vFloorBaseStats : baseStats;
     const up = stats.promotionProbability;
     const down = 1 - up;
 
@@ -685,7 +685,17 @@ const computeExpectedToCurrentTierI = (
     return Number.POSITIVE_INFINITY;
   }
 
-  return solved[currentTier] ?? Number.POSITIVE_INFINITY;
+  const up = currentStats.promotionProbability;
+  const down = 1 - up;
+
+  if (currentTier === 0) {
+    return currentStats.expectedMatches + (solved[1] ?? Number.POSITIVE_INFINITY);
+  }
+
+  const promotedExpectation = currentTier + 1 >= 4 ? 0 : (solved[currentTier + 1] ?? Number.POSITIVE_INFINITY);
+  const demotedExpectation = solved[currentTier - 1] ?? Number.POSITIVE_INFINITY;
+
+  return currentStats.expectedMatches + up * promotedExpectation + down * demotedExpectation;
 };
 
 const computeExpectedToNextBigTierV = (
@@ -708,7 +718,7 @@ const computeExpectedToNextBigTierV = (
       return Number.POSITIVE_INFINITY;
     }
 
-    const stats = tier === currentTier ? currentStats : tier === 0 ? vFloorBaseStats : baseStats;
+    const stats = tier === 0 ? vFloorBaseStats : baseStats;
     const up = stats.promotionProbability;
     const down = 1 - up;
 
@@ -732,7 +742,17 @@ const computeExpectedToNextBigTierV = (
     return Number.POSITIVE_INFINITY;
   }
 
-  return solved[currentTier] ?? Number.POSITIVE_INFINITY;
+  const up = currentStats.promotionProbability;
+  const down = 1 - up;
+
+  if (currentTier === 0) {
+    return currentStats.expectedMatches + (solved[1] ?? Number.POSITIVE_INFINITY);
+  }
+
+  const promotedExpectation = currentTier >= 4 ? 0 : (solved[currentTier + 1] ?? Number.POSITIVE_INFINITY);
+  const demotedExpectation = solved[currentTier - 1] ?? Number.POSITIVE_INFINITY;
+
+  return currentStats.expectedMatches + up * promotedExpectation + down * demotedExpectation;
 };
 
 const calculateRankProgressStatsJs = (

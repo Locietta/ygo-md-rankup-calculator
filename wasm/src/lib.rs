@@ -55,20 +55,18 @@ pub fn calculate_rank_progress_stats(
     let v_floor_base_stats = calculate_v_floor_segment_stats_internal(p, k_val, 0);
     let current_tier = current_subtier_val as usize;
 
-    let expected_to_current_tier_i =
-        compute_expected_to_current_tier_i(
-            current_tier,
-            &current_stats,
-            &base_stats,
-            &v_floor_base_stats,
-        );
-    let expected_to_next_big_tier_v =
-        compute_expected_to_next_big_tier_v(
-            current_tier,
-            &current_stats,
-            &base_stats,
-            &v_floor_base_stats,
-        );
+    let expected_to_current_tier_i = compute_expected_to_current_tier_i(
+        current_tier,
+        &current_stats,
+        &base_stats,
+        &v_floor_base_stats,
+    );
+    let expected_to_next_big_tier_v = compute_expected_to_next_big_tier_v(
+        current_tier,
+        &current_stats,
+        &base_stats,
+        &v_floor_base_stats,
+    );
 
     RankProgressStats {
         leave_current_segment_expected: current_stats.expected_matches,
@@ -78,7 +76,11 @@ pub fn calculate_rank_progress_stats(
     }
 }
 
-fn calculate_rank_stats_formulas_internal(p: f64, k_val: i32, current_net_wins_val: i32) -> RankStats {
+fn calculate_rank_stats_formulas_internal(
+    p: f64,
+    k_val: i32,
+    current_net_wins_val: i32,
+) -> RankStats {
     // Handle edge cases for p=0 and p=1 first (most intuitive and avoids polynomial calculations)
     // also treat any negative p as 0, and any p > 1 as 1
     if p <= 0.0 {
@@ -114,7 +116,8 @@ fn calculate_rank_stats_formulas_internal(p: f64, k_val: i32, current_net_wins_v
     let promotion_probability =
         (martingale(current_net_wins_val) - martingale(-3)) / (martingale(k_val) - martingale(-3));
 
-    let expected_matches = calculate_non_floor_segment_expected_internal(p, k_val, current_net_wins_val);
+    let expected_matches =
+        calculate_non_floor_segment_expected_internal(p, k_val, current_net_wins_val);
 
     RankStats {
         expected_matches: expected_matches.max(0.0),
@@ -122,7 +125,11 @@ fn calculate_rank_stats_formulas_internal(p: f64, k_val: i32, current_net_wins_v
     }
 }
 
-fn calculate_non_floor_segment_expected_internal(p: f64, k_val: i32, current_net_wins_val: i32) -> f64 {
+fn calculate_non_floor_segment_expected_internal(
+    p: f64,
+    k_val: i32,
+    current_net_wins_val: i32,
+) -> f64 {
     let start = current_net_wins_val.clamp(-2, k_val - 1);
     let q = 1.0 - p;
 
@@ -157,7 +164,11 @@ fn calculate_non_floor_segment_expected_internal(p: f64, k_val: i32, current_net
         .unwrap_or(f64::INFINITY)
 }
 
-fn calculate_v_floor_segment_stats_internal(p: f64, k_val: i32, current_net_wins_val: i32) -> RankStats {
+fn calculate_v_floor_segment_stats_internal(
+    p: f64,
+    k_val: i32,
+    current_net_wins_val: i32,
+) -> RankStats {
     let start = current_net_wins_val.clamp(0, k_val - 1) as usize;
 
     if p <= 0.0 {
@@ -270,14 +281,13 @@ fn compute_expected_to_current_tier_i(
     }
 
     // State order: V, IV, III, II. I is absorbing target.
+    // These equations are for the standard "enter this subtier at 0 wins" state.
     let size = 4;
     let mut matrix = vec![vec![0.0; size]; size];
     let mut vector = vec![0.0; size];
 
     for tier in 0..size {
-        let stats = if tier == current_tier {
-            current_stats
-        } else if tier == 0 {
+        let stats = if tier == 0 {
             v_floor_base_stats
         } else {
             base_stats
@@ -300,9 +310,26 @@ fn compute_expected_to_current_tier_i(
         }
     }
 
-    solve_linear_system(&matrix, &vector)
-        .and_then(|solved| solved.get(current_tier).copied())
-        .unwrap_or(f64::INFINITY)
+    let solved = match solve_linear_system(&matrix, &vector) {
+        Some(solved) => solved,
+        None => return f64::INFINITY,
+    };
+
+    let up = current_stats.promotion_probability;
+    let down = 1.0 - up;
+
+    if current_tier == 0 {
+        return current_stats.expected_matches + solved[1];
+    }
+
+    let promoted_expectation = if current_tier + 1 >= 4 {
+        0.0
+    } else {
+        solved[current_tier + 1]
+    };
+    let demoted_expectation = solved[current_tier - 1];
+
+    current_stats.expected_matches + up * promoted_expectation + down * demoted_expectation
 }
 
 fn compute_expected_to_next_big_tier_v(
@@ -316,14 +343,13 @@ fn compute_expected_to_next_big_tier_v(
     }
 
     // State order: V, IV, III, II, I. Next big-tier V is absorbing target.
+    // These equations are for the standard "enter this subtier at 0 wins" state.
     let size = 5;
     let mut matrix = vec![vec![0.0; size]; size];
     let mut vector = vec![0.0; size];
 
     for tier in 0..size {
-        let stats = if tier == current_tier {
-            current_stats
-        } else if tier == 0 {
+        let stats = if tier == 0 {
             v_floor_base_stats
         } else {
             base_stats
@@ -346,9 +372,26 @@ fn compute_expected_to_next_big_tier_v(
         }
     }
 
-    solve_linear_system(&matrix, &vector)
-        .and_then(|solved| solved.get(current_tier).copied())
-        .unwrap_or(f64::INFINITY)
+    let solved = match solve_linear_system(&matrix, &vector) {
+        Some(solved) => solved,
+        None => return f64::INFINITY,
+    };
+
+    let up = current_stats.promotion_probability;
+    let down = 1.0 - up;
+
+    if current_tier == 0 {
+        return current_stats.expected_matches + solved[1];
+    }
+
+    let promoted_expectation = if current_tier >= 4 {
+        0.0
+    } else {
+        solved[current_tier + 1]
+    };
+    let demoted_expectation = solved[current_tier - 1];
+
+    current_stats.expected_matches + up * promoted_expectation + down * demoted_expectation
 }
 
 #[inline]
@@ -373,13 +416,14 @@ mod tests {
     use super::*;
     use rand::{Rng, SeedableRng};
     use rand_chacha::ChaCha8Rng;
+    use std::thread;
 
-    const TRIALS: usize = 1_000_000;
+    const TRIALS: usize = 10_000_000;
     const EXPECTED_REL_TOLERANCE: f64 = 0.02;
     const PROBABILITY_REL_TOLERANCE: f64 = 0.01;
     const EXPECTED_ABS_FLOOR: f64 = 1e-6;
     const PROBABILITY_ABS_FLOOR: f64 = 1e-6;
-    const MAX_STEPS: usize = 1_000_000;
+    const MAX_STEPS: usize = 10_000_000;
 
     #[derive(Clone, Copy)]
     struct Case {
@@ -388,6 +432,14 @@ mod tests {
         net: i32,
         tier: i32,
         seed: u64,
+    }
+
+    #[derive(Default)]
+    struct MonteCarloSums {
+        leave_sum: f64,
+        promote_count: f64,
+        to_i_sum: f64,
+        to_next_v_sum: f64,
     }
 
     fn assert_relative_close(
@@ -429,11 +481,7 @@ mod tests {
                 matches += 1;
                 let win = rng.gen_bool(p);
                 if win {
-                    if state == 0 {
-                        state = 1;
-                    } else {
-                        state += 1;
-                    }
+                    state += 1;
                 } else if state > 0 {
                     state -= 1;
                 }
@@ -484,8 +532,7 @@ mod tests {
             let start_net = if first { case.net } else { 0 };
             first = false;
 
-            let (m, promoted) =
-                simulate_segment_once(rng, case.p, case.k, start_net, tier == 0);
+            let (m, promoted) = simulate_segment_once(rng, case.p, case.k, start_net, tier == 0);
             total += m;
 
             if promoted {
@@ -507,8 +554,7 @@ mod tests {
             let start_net = if first { case.net } else { 0 };
             first = false;
 
-            let (m, promoted) =
-                simulate_segment_once(rng, case.p, case.k, start_net, tier == 0);
+            let (m, promoted) = simulate_segment_once(rng, case.p, case.k, start_net, tier == 0);
             total += m;
 
             if promoted {
@@ -526,24 +572,52 @@ mod tests {
 
     fn monte_carlo_validate_case(case: Case) {
         let exact = calculate_rank_progress_stats(case.p, case.k, case.net, case.tier);
-        let mut rng = ChaCha8Rng::seed_from_u64(case.seed);
+        let worker_count = thread::available_parallelism()
+            .map(|parallelism| parallelism.get())
+            .unwrap_or(1)
+            .min(TRIALS.max(1));
+
+        let chunk_size = TRIALS / worker_count;
+        let remainder = TRIALS % worker_count;
 
         let mut leave_sum = 0.0;
         let mut promote_count = 0.0;
         let mut to_i_sum = 0.0;
         let mut to_next_v_sum = 0.0;
 
-        for _ in 0..TRIALS {
-            let (leave_m, promoted) =
-                simulate_segment_once(&mut rng, case.p, case.k, case.net, case.tier == 0);
-            leave_sum += leave_m as f64;
-            if promoted {
-                promote_count += 1.0;
+        thread::scope(|scope| {
+            let mut handles = Vec::with_capacity(worker_count);
+            for worker_idx in 0..worker_count {
+                let local_trials = chunk_size + usize::from(worker_idx < remainder);
+                let seed = case.seed.wrapping_add(worker_idx as u64);
+                handles.push(scope.spawn(move || {
+                    let mut rng = ChaCha8Rng::seed_from_u64(seed);
+                    let mut sums = MonteCarloSums::default();
+
+                    for _ in 0..local_trials {
+                        let (leave_m, promoted) =
+                            simulate_segment_once(&mut rng, case.p, case.k, case.net, case.tier == 0);
+                        sums.leave_sum += leave_m as f64;
+                        if promoted {
+                            sums.promote_count += 1.0;
+                        }
+
+                        sums.to_i_sum += simulate_to_current_tier_i_once(&mut rng, case) as f64;
+                        sums.to_next_v_sum += simulate_to_next_big_tier_v_once(&mut rng, case) as f64;
+                    }
+
+                    sums
+                }));
             }
 
-            to_i_sum += simulate_to_current_tier_i_once(&mut rng, case) as f64;
-            to_next_v_sum += simulate_to_next_big_tier_v_once(&mut rng, case) as f64;
-        }
+            for handle in handles {
+                let sums = handle.join().expect("monte carlo worker panicked");
+                leave_sum += sums.leave_sum;
+                promote_count += sums.promote_count;
+                to_i_sum += sums.to_i_sum;
+                to_next_v_sum += sums.to_next_v_sum;
+            }
+        });
 
         let leave_mc = leave_sum / TRIALS as f64;
         let promote_mc = promote_count / TRIALS as f64;
@@ -582,23 +656,62 @@ mod tests {
 
     #[test]
     fn monte_carlo_matches_formulas_k4() {
-        monte_carlo_validate_case(Case {
-            p: 0.6,
-            k: 4,
-            net: 0,
-            tier: 0,
-            seed: 114_514,
-        });
+        let test_cases = [
+            Case {
+                p: 0.5,
+                k: 4,
+                net: 0,
+                tier: 2,
+                seed: 42,
+            },
+            Case {
+                p: 0.55,
+                k: 4,
+                net: -1,
+                tier: 1,
+                seed: 12345,
+            },
+            Case {
+                p: 0.65,
+                k: 4,
+                net: 2,
+                tier: 3,
+                seed: 54321,
+            },
+        ];
+        for case in test_cases {
+            monte_carlo_validate_case(case);
+        }
     }
 
     #[test]
     fn monte_carlo_matches_formulas_k5() {
-        monte_carlo_validate_case(Case {
-            p: 0.52,
-            k: 5,
-            net: 0,
-            tier: 4,
-            seed: 9,
-        });
+        let test_cases = [
+            Case {
+                p: 0.5,
+                k: 5,
+                net: 0,
+                tier: 2,
+                seed: 42,
+            },
+            Case {
+                p: 0.55,
+                k: 5,
+                net: -1,
+                tier: 1,
+                seed: 12345,
+            },
+            Case {
+                p: 0.65,
+                k: 5,
+                net: 2,
+                tier: 3,
+                seed: 54321,
+            },
+        ];
+
+        for case in test_cases {
+            monte_carlo_validate_case(case);
+        }
     }
 }
