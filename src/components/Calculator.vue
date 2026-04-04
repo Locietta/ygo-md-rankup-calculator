@@ -495,6 +495,12 @@ watch(currentNetWins, (value) => {
   }
 });
 
+watch(advancedWinRate, (isAdvanced, wasAdvanced) => {
+  if (wasAdvanced && !isAdvanced) {
+    winRate.value = Math.round(effectiveWinRate.value * 10) / 10;
+  }
+});
+
 const createMartingaleFn = (p: number) => {
   return (n: number): number => {
     if (n >= 0) {
