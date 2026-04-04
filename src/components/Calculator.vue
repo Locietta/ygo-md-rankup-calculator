@@ -1,8 +1,11 @@
 <template>
   <v-container class="calculator-page py-6 py-md-10">
     <section class="hero mb-3 mb-md-4">
-      <p class="hero-kicker">Yu-Gi-Oh! Master Duel</p>
-      <h1 class="hero-title">段位升降与大段期望计算器</h1>
+      <div class="hero-bg" aria-hidden="true"></div>
+      <div class="hero-content">
+        <p class="hero-kicker">Yu-Gi-Oh! Master Duel</p>
+        <h1 class="hero-title">段位升降与大段期望计算器</h1>
+      </div>
     </section>
 
     <v-alert
@@ -1021,25 +1024,35 @@ const handleCalculate = async (): Promise<void> => {
 .hero {
   position: relative;
   overflow: hidden;
-  padding: 1.6rem 1.2rem;
   border-radius: 1.2rem;
-  background: linear-gradient(120deg, rgba(8, 65, 92, 0.95), rgba(7, 126, 105, 0.9));
   color: #f7fffe;
+  isolation: isolate;
 }
 
-.hero::after {
+.hero-bg {
+  position: absolute;
+  inset: 0;
+  background: url("/hero-banner.webp") center / cover no-repeat;
+  filter: blur(6px);
+  scale: 1.05;
+  z-index: -2;
+}
+
+.hero-bg::after {
   content: "";
   position: absolute;
-  right: -90px;
-  top: -120px;
-  width: 260px;
-  height: 260px;
-  border-radius: 50%;
-  background: radial-gradient(
-    circle at 30% 30%,
-    rgba(255, 255, 255, 0.35),
-    rgba(255, 255, 255, 0.08)
+  inset: 0;
+  background: linear-gradient(
+    120deg,
+    rgba(12, 18, 30, 0.68),
+    rgba(20, 10, 10, 0.58)
   );
+  z-index: 1;
+}
+
+.hero-content {
+  position: relative;
+  padding: 1.8rem 1.4rem;
 }
 
 .hero-kicker {
@@ -1048,6 +1061,7 @@ const handleCalculate = async (): Promise<void> => {
   text-transform: uppercase;
   letter-spacing: 0.12em;
   opacity: 0.9;
+  text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.5);
 }
 
 .hero-title {
@@ -1055,12 +1069,18 @@ const handleCalculate = async (): Promise<void> => {
   font-size: clamp(1.7rem, 3vw, 2.4rem);
   line-height: 1.2;
   font-family: "Noto Serif SC", "Source Han Serif SC", serif;
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
 }
 
 .intro-alert-text {
   margin: 0;
   font-size: 0.88rem;
   line-height: 1.5;
+}
+
+.v-theme--dark .intro-alert {
+  background: rgba(19, 32, 47, 0.75);
+  border-radius: 0.95rem;
 }
 
 .intro-alert a {
@@ -1081,6 +1101,7 @@ const handleCalculate = async (): Promise<void> => {
   background: var(--panel-bg);
   border: 1px solid var(--panel-border);
   backdrop-filter: blur(8px);
+  opacity: 0.85;
 }
 
 .panel-input {
@@ -1213,8 +1234,8 @@ const handleCalculate = async (): Promise<void> => {
     padding: 1rem;
   }
 
-  .hero {
-    padding: 1.2rem 1rem;
+  .hero-content {
+    padding: 1.4rem 1rem;
   }
 
   .metric-value {
