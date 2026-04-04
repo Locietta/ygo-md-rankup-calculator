@@ -77,28 +77,118 @@
 
             <v-card variant="flat" class="mb-2 winrate-box" rounded="lg">
               <div class="d-flex justify-space-between align-center mb-2 winrate-head">
-                <label class="winrate-label">平均胜率</label>
-                <strong class="winrate-value">{{ winRate.toFixed(1) }}%</strong>
+                <label class="winrate-label">
+                  {{ advancedWinRate ? "先后手胜率" : "平均胜率" }}
+                </label>
+                <v-switch
+                  v-model="advancedWinRate"
+                  label="先后手"
+                  density="compact"
+                  hide-details
+                  color="primary"
+                  class="winrate-mode-toggle"
+                />
               </div>
-              <v-slider
-                v-model="winRate"
-                :min="0"
-                :max="100"
-                :step="0.1"
-                color="primary"
-                hide-details
-                class="winrate-slider"
-              />
-              <v-text-field
-                v-model.number="winRate"
-                type="number"
-                suffix="%"
-                :rules="winRateRules"
-                variant="outlined"
-                density="compact"
-                hide-details="auto"
-                class="mt-3 winrate-input"
-              />
+
+              <template v-if="!advancedWinRate">
+                <div class="d-flex justify-end mb-1">
+                  <strong class="winrate-value">{{ winRate.toFixed(1) }}%</strong>
+                </div>
+                <v-slider
+                  v-model="winRate"
+                  :min="0"
+                  :max="100"
+                  :step="0.1"
+                  color="primary"
+                  hide-details
+                  class="winrate-slider"
+                />
+                <v-text-field
+                  v-model.number="winRate"
+                  type="number"
+                  suffix="%"
+                  :rules="winRateRules"
+                  variant="outlined"
+                  density="compact"
+                  hide-details="auto"
+                  class="mt-3 winrate-input"
+                />
+              </template>
+
+              <template v-else>
+                <div class="winrate-advanced-row">
+                  <label class="winrate-label--sub">先手概率</label>
+                  <v-slider
+                    v-model="goingFirstProb"
+                    :min="0"
+                    :max="100"
+                    :step="0.1"
+                    color="primary"
+                    hide-details
+                    class="winrate-slider"
+                  />
+                  <v-text-field
+                    v-model.number="goingFirstProb"
+                    type="number"
+                    suffix="%"
+                    :rules="winRateRules"
+                    variant="outlined"
+                    density="compact"
+                    hide-details="auto"
+                    class="mt-2 winrate-input"
+                  />
+                </div>
+
+                <div class="winrate-advanced-row mt-3">
+                  <label class="winrate-label--sub">先手胜率</label>
+                  <v-slider
+                    v-model="winRateFirst"
+                    :min="0"
+                    :max="100"
+                    :step="0.1"
+                    color="primary"
+                    hide-details
+                    class="winrate-slider"
+                  />
+                  <v-text-field
+                    v-model.number="winRateFirst"
+                    type="number"
+                    suffix="%"
+                    :rules="winRateRules"
+                    variant="outlined"
+                    density="compact"
+                    hide-details="auto"
+                    class="mt-2 winrate-input"
+                  />
+                </div>
+
+                <div class="winrate-advanced-row mt-3">
+                  <label class="winrate-label--sub">后手胜率</label>
+                  <v-slider
+                    v-model="winRateSecond"
+                    :min="0"
+                    :max="100"
+                    :step="0.1"
+                    color="primary"
+                    hide-details
+                    class="winrate-slider"
+                  />
+                  <v-text-field
+                    v-model.number="winRateSecond"
+                    type="number"
+                    suffix="%"
+                    :rules="winRateRules"
+                    variant="outlined"
+                    density="compact"
+                    hide-details="auto"
+                    class="mt-2 winrate-input"
+                  />
+                </div>
+
+                <div class="winrate-effective mt-3">
+                  等效胜率：<strong>{{ effectiveWinRate.toFixed(1) }}%</strong>
+                </div>
+              </template>
             </v-card>
 
             <v-btn
@@ -170,7 +260,9 @@
                 K = {{ displayRankType }}
               </v-chip>
               <v-chip size="small" color="primary" variant="outlined" class="mr-2 mb-2">
-                胜率 = {{ displayWinRate === null ? "-" : displayWinRate.toFixed(1) }}%
+                胜率 = {{ displayWinRate === null ? "-" : displayWinRate.toFixed(1) }}%{{
+                  displayAdvancedMode ? "（先后手）" : ""
+                }}
               </v-chip>
               <v-chip size="small" color="secondary" variant="tonal" class="mb-2">
                 求解后端：{{ solverMode }}
@@ -237,6 +329,7 @@ interface CalculationSnapshot {
   currentSubtierLabel: string;
   winRate: number;
   isHighestBigTier: boolean;
+  advancedMode?: boolean;
 }
 
 interface WasmRankProgressStats {
@@ -280,6 +373,18 @@ const rankType = ref<RankK>(4);
 const currentSubtier = ref<SubtierValue>(0);
 const currentNetWins = ref<number>(0);
 const winRate = ref<number>(55);
+
+const advancedWinRate = ref(false);
+const goingFirstProb = ref<number>(50);
+const winRateFirst = ref<number>(60);
+const winRateSecond = ref<number>(50);
+
+const effectiveWinRate = computed(() => {
+  const p1 = goingFirstProb.value / 100;
+  const w1 = winRateFirst.value / 100;
+  const w2 = winRateSecond.value / 100;
+  return (p1 * w1 + (1 - p1) * w2) * 100;
+});
 
 const isLoading = ref(false);
 const solverMode = ref<"WASM" | "JS">("WASM");
@@ -342,6 +447,7 @@ const displaySubtierLabel = computed(() => lastCalculation.value?.currentSubtier
 const displayRankType = computed(() => lastCalculation.value?.rankType ?? "-");
 const displayWinRate = computed(() => lastCalculation.value?.winRate ?? null);
 const displayIsHighestBigTier = computed(() => lastCalculation.value?.isHighestBigTier ?? false);
+const displayAdvancedMode = computed(() => lastCalculation.value?.advancedMode ?? false);
 
 const winRateRules = [
   (value: unknown) => value !== null || "胜率不能为空",
@@ -692,7 +798,8 @@ const computeExpectedToCurrentTierI = (
     return currentStats.expectedMatches + (solved[1] ?? Number.POSITIVE_INFINITY);
   }
 
-  const promotedExpectation = currentTier + 1 >= 4 ? 0 : (solved[currentTier + 1] ?? Number.POSITIVE_INFINITY);
+  const promotedExpectation =
+    currentTier + 1 >= 4 ? 0 : (solved[currentTier + 1] ?? Number.POSITIVE_INFINITY);
   const demotedExpectation = solved[currentTier - 1] ?? Number.POSITIVE_INFINITY;
 
   return currentStats.expectedMatches + up * promotedExpectation + down * demotedExpectation;
@@ -749,7 +856,8 @@ const computeExpectedToNextBigTierV = (
     return currentStats.expectedMatches + (solved[1] ?? Number.POSITIVE_INFINITY);
   }
 
-  const promotedExpectation = currentTier >= 4 ? 0 : (solved[currentTier + 1] ?? Number.POSITIVE_INFINITY);
+  const promotedExpectation =
+    currentTier >= 4 ? 0 : (solved[currentTier + 1] ?? Number.POSITIVE_INFINITY);
   const demotedExpectation = solved[currentTier - 1] ?? Number.POSITIVE_INFINITY;
 
   return currentStats.expectedMatches + up * promotedExpectation + down * demotedExpectation;
@@ -811,7 +919,7 @@ const handleCalculate = async (): Promise<void> => {
 
   isLoading.value = true;
   try {
-    const winRateValue = winRate.value;
+    const winRateValue = advancedWinRate.value ? effectiveWinRate.value : winRate.value;
     const p = clamp(winRateValue / 100, 0, 1);
     const k = rankType.value;
     const currentNet = currentNetWins.value;
@@ -823,6 +931,7 @@ const handleCalculate = async (): Promise<void> => {
       currentSubtierLabel: currentSubtierLabel.value,
       winRate: winRateValue,
       isHighestBigTier: rankTypeConfig.isHighestBigTier,
+      advancedMode: advancedWinRate.value,
     };
 
     if (wasmReady.value) {
@@ -1022,6 +1131,24 @@ const handleCalculate = async (): Promise<void> => {
 
 .winrate-input {
   padding-inline: 0.2rem;
+}
+
+.winrate-mode-toggle {
+  flex: 0 0 auto;
+}
+
+.winrate-label--sub {
+  font-size: 0.88rem;
+  font-weight: 500;
+  color: var(--winrate-label-color);
+  margin-bottom: 0.15rem;
+}
+
+.winrate-effective {
+  font-size: 0.9rem;
+  color: var(--winrate-label-color);
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--winrate-box-border);
 }
 
 .metric-grid {
