@@ -982,6 +982,9 @@ const handleCalculate = async (): Promise<void> => {
 <style scoped>
 .calculator-page {
   max-width: 1240px;
+  --intro-alert-bg: rgba(229, 240, 255, 0.86);
+  --intro-alert-border: rgba(40, 92, 156, 0.28);
+  --intro-alert-color: #173a5c;
   --intro-link-color: #0b3f75;
   --intro-link-hover-color: #7a2f00;
   --panel-bg: rgba(255, 255, 255, 0.9);
@@ -1002,6 +1005,9 @@ const handleCalculate = async (): Promise<void> => {
 }
 
 :global(.v-theme--dark) .calculator-page {
+  --intro-alert-bg: rgba(19, 32, 47, 0.82);
+  --intro-alert-border: rgba(115, 178, 214, 0.28);
+  --intro-alert-color: #e1f2ff;
   --intro-link-color: #95d2ff;
   --intro-link-hover-color: #ffd7b5;
   --panel-bg: rgba(17, 27, 39, 0.88);
@@ -1072,15 +1078,22 @@ const handleCalculate = async (): Promise<void> => {
   text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
 }
 
+.intro-alert {
+  background: var(--intro-alert-bg);
+  border: 1px solid var(--intro-alert-border);
+  border-radius: 0.95rem;
+  color: var(--intro-alert-color);
+  box-shadow: 0 10px 28px rgba(34, 71, 112, 0.1);
+}
+
 .intro-alert-text {
   margin: 0;
   font-size: 0.88rem;
   line-height: 1.5;
 }
 
-.v-theme--dark .intro-alert {
-  background: rgba(19, 32, 47, 0.75);
-  border-radius: 0.95rem;
+.intro-alert :deep(.v-alert__prepend) {
+  color: var(--intro-link-color);
 }
 
 .intro-alert a {
