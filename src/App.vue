@@ -21,18 +21,43 @@ import Calculator from "./components/Calculator.vue";
 
 <style scoped>
 .app-main {
+  position: relative;
   min-height: 100vh;
-  background: url("/bg-dmg.webp") center 25% / cover no-repeat fixed;
+  min-height: 100svh;
+  isolation: isolate;
 }
 
 .app-main::before {
   content: "";
   position: fixed;
-  inset: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 100vh;
+  background: url("/bg-dmg.webp") center 25% / cover no-repeat;
+  pointer-events: none;
+  z-index: -2;
+}
+
+.app-main::after {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 100vh;
   background: rgba(240, 244, 248, 0.6);
   pointer-events: none;
-  z-index: 0;
+  z-index: -1;
 }
+
+@supports (height: 100lvh) {
+  .app-main::before,
+  .app-main::after {
+    height: 100lvh;
+  }
+}
+
 .art-credit {
   position: fixed;
   bottom: 8px;
